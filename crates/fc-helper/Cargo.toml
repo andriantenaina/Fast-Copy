@@ -15,11 +15,9 @@ name = "fc-helper"
 path = "src/main.rs"
 test = false
 
-[dependencies]
-serde_json.workspace = true
-
 # Formatting and VSS snapshots are Windows-only; on macOS the helper only reports "unsupported".
 [target.'cfg(windows)'.dependencies]
 fc-core.workspace = true
+serde_json.workspace = true
 
 [build-dependencies]
