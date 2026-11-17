@@ -1,0 +1,10 @@
+# Store text as LF in the repository (macOS scripts, YAML, Rust). Windows-only scripts keep CRLF on checkout.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.nsh text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.icns binary
+*.ico binary
+*.png binary
+*.exe binary

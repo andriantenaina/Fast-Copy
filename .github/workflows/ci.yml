@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+          - name: macos-arm64
+            os: macos-14
+          # macos-13 (the last x86_64 image of that line) has been retired by GitHub;
+          # macos-15-intel is the x86_64 replacement label.
+          - name: macos-x86_64
+            os: macos-15-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: rust-${{ matrix.name }}
+
+      - name: cargo fmt (non-blocking)
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy (engine, CLI, helper)
+        run: cargo clippy -p fc-core -p fc-cli -p fc-helper --all-targets
+
+      - name: cargo test (workspace minus shell extension and GUI)
+        run: cargo test --workspace --exclude fc-shellext-win --exclude fast-copy-app
+
+      # ---- Windows-only: Explorer shell extension + sparse package --------------------------
+      - name: Shell extension - clippy
+        if: runner.os == 'Windows'
+        run: cargo clippy -p fc-shellext-win --all-targets
+
+      - name: Shell extension - unit tests
+        if: runner.os == 'Windows'
+        run: cargo test -p fc-shellext-win
+
+      - name: Shell extension - release build (DLL + harness)
+        if: runner.os == 'Windows'
+        run: cargo build -p fc-shellext-win --release --lib --examples
+
+      - name: Shell extension - load DLL through COM and invoke commands
+        if: runner.os == 'Windows'
+        run: ./target/release/examples/load_dll.exe
+
+      - name: Sparse package - MakeAppx (unsigned)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/windows/build-sparse.ps1 -NoSign
+
+  gui:
+    name: GUI (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+          - name: macos-arm64
+            os: macos-14
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gui-${{ matrix.name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: npm run build
+        working-directory: app
+        run: npm run build
+
+      # tauri.conf.json declares the fc-helper sidecar (externalBin); it must exist for the
+      # Tauri build script, even for a plain `cargo build`.
+      - name: Prepare fc-helper sidecar
+        working-directory: app
+        run: node scripts/prepare-sidecar.mjs --debug
+
+      - name: cargo build -p fast-copy-app
+        run: cargo build -p fast-copy-app

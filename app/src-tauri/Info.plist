@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Files and folders</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.item</string>
+        <string>public.folder</string>
+      </array>
+    </dict>
+  </array>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Fast Copy needs access to the files you choose to copy.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Fast Copy needs access to the files you choose to copy.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Fast Copy needs access to the files you choose to copy.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Fast Copy copies files to and from external drives.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Fast Copy copies files to and from network drives.</string>
+</dict>
+</plist>

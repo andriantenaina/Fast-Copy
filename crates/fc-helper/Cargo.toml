@@ -1,0 +1,21 @@
+[package]
+name = "fc-helper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Fast Copy elevated helper (drive formatting, VSS snapshots)"
+
+# No unit tests here; the test harness would inherit the requireAdministrator manifest
+# (UAC prompt / os error 740 when `cargo test --workspace` runs unelevated).
+[[bin]]
+name = "fc-helper"
+path = "src/main.rs"
+test = false
+
+[dependencies]
+fc-core.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]

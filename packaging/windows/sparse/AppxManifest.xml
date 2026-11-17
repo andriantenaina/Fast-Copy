@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fast Copy - sparse package ("packaging with external location").
+
+  Gives fast-copy.exe / fc_shellext_win.dll a package identity so that Windows 11 shows the
+  IExplorerCommand handler in the modern (top-level) File Explorer context menu.
+  The package itself only contains this manifest + Assets\*.png; the executables live in the
+  "external location" (the app install dir) passed to Add-AppxPackage -ExternalLocation.
+
+  build-sparse.ps1 rewrites Identity/@Name, @Publisher, @Version and @ProcessorArchitecture
+  at pack time. Publisher MUST be byte-identical to the signing certificate's Subject.
+
+  CLSIDs registered here (implemented in crates/fc-shellext-win), one top-level entry each:
+    {5AC697DB-2A91-47AE-9DF4-83D916BF7025}  files + folders   Copier avec Fast Copy
+    {11FFD5D3-8A78-4A65-A664-449CD515A7A0}  files + folders   Déplacer avec Fast Copy
+    {0C57FA8B-4D91-4528-B75D-62E16CCEB676}  a folder          Coller ici avec Fast Copy (hidden if nothing to paste)
+    {1CC48706-C26D-4B46-B786-28A0942AB45E}  folder background Coller ici avec Fast Copy (hidden if nothing to paste)
+  The DLL also serves the older sub-menu classes {FD3E33D7-…} / {2F9A8E37-…} (not registered).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap uap10 rescap desktop4 desktop5 com">
+
+  <Identity
+    Name="FastCopy.ShellExtension"
+    Publisher="CN=Fast Copy"
+    Version="0.1.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Fast Copy</DisplayName>
+    <PublisherDisplayName>Fast Copy contributors</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="fr-fr" />
+  </Resources>
+
+  <Dependencies>
+    <!-- 19041 = Windows 10 2004, the first build supporting packages with external location. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+
+  <Applications>
+    <Application
+      Id="FastCopy"
+      Executable="fast-copy.exe"
+      uap10:TrustLevel="mediumIL"
+      uap10:RuntimeBehavior="win32App">
+
+      <!-- AppListEntry="none": the regular NSIS/MSI install already creates the Start menu entry. -->
+      <uap:VisualElements
+        AppListEntry="none"
+        DisplayName="Fast Copy"
+        Description="Fast Copy - File Explorer integration"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+
+      <Extensions>
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="FastCopyCopy" Clsid="5AC697DB-2A91-47AE-9DF4-83D916BF7025" />
+              <desktop5:Verb Id="FastCopyMove" Clsid="11FFD5D3-8A78-4A65-A664-449CD515A7A0" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="FastCopyCopy" Clsid="5AC697DB-2A91-47AE-9DF4-83D916BF7025" />
+              <desktop5:Verb Id="FastCopyMove" Clsid="11FFD5D3-8A78-4A65-A664-449CD515A7A0" />
+              <desktop5:Verb Id="FastCopyPasteInto" Clsid="0C57FA8B-4D91-4528-B75D-62E16CCEB676" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory\Background">
+              <desktop5:Verb Id="FastCopyPasteHere" Clsid="1CC48706-C26D-4B46-B786-28A0942AB45E" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Fast Copy shell extension">
+              <com:Class Id="5AC697DB-2A91-47AE-9DF4-83D916BF7025" Path="fc_shellext_win.dll" ThreadingModel="STA" />
+              <com:Class Id="11FFD5D3-8A78-4A65-A664-449CD515A7A0" Path="fc_shellext_win.dll" ThreadingModel="STA" />
+              <com:Class Id="0C57FA8B-4D91-4528-B75D-62E16CCEB676" Path="fc_shellext_win.dll" ThreadingModel="STA" />
+              <com:Class Id="1CC48706-C26D-4B46-B786-28A0942AB45E" Path="fc_shellext_win.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

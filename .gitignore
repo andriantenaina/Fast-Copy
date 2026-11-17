@@ -1,0 +1,10 @@
+/target/
+node_modules/
+/app/ui/dist/
+/app/src-tauri/binaries/
+/app/src-tauri/gen/
+/packaging/windows/out/
+*.pfx
+*.cer
+.DS_Store
+Thumbs.db

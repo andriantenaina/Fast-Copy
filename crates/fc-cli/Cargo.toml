@@ -1,0 +1,23 @@
+[package]
+name = "fc-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Fast Copy command-line interface"
+
+[[bin]]
+name = "fcopy"
+path = "src/main.rs"
+
+[dependencies]
+fc-core.workspace = true
+clap.workspace = true
+indicatif.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+ctrlc = "3"
+
+[dev-dependencies]
+tempfile = "3"

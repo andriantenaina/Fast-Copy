@@ -1,0 +1,42 @@
+﻿[package]
+name = "fc-shellext-win"
+description = "Fast Copy - Windows 11 modern context menu (IExplorerCommand COM in-proc server)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+# The whole crate is Windows-only (the lib is `#![cfg(windows)]`, so it builds as an
+# empty cdylib elsewhere and `cargo build --workspace` keeps working on macOS).
+[target.'cfg(windows)'.dependencies]
+windows-core = "0.58"
+windows = { version = "0.58", features = [
+  "implement",
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Security",
+  "Win32_System_Com",
+  "Win32_System_DataExchange",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Ole",
+  "Win32_System_SystemServices",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+# Sanity harness: loads the built DLL, goes through DllGetClassObject -> IClassFactory ->
+# IExplorerCommand, enumerates the sub-menu and invokes "copy" against a dummy fast-copy.exe.
+#   cargo build -p fc-shellext-win --release
+#   cargo run -p fc-shellext-win --example load_dll --release
+[[example]]
+name = "load_dll"
+path = "examples/load_dll.rs"

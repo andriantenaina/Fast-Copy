@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.9.0.schema.json
+# Template - see FastCopy.FastCopy.yaml.
+PackageIdentifier: FastCopy.FastCopy
+PackageVersion: "{{VERSION}}"
+PackageLocale: fr-FR
+Publisher: Fast Copy contributors
+PackageName: Fast Copy
+ShortDescription: Copies de fichiers rapides, vérifiées et reprenables.
+Description: |-
+  Fast Copy copie et déplace des fichiers très rapidement sans perte de données : vérification
+  de bout en bout, reprise après plantage, découpage FAT32 et formatage exFAT. S'intègre au menu
+  contextuel de l'Explorateur (y compris le menu principal de Windows 11).
+ManifestType: locale
+ManifestVersion: 1.9.0

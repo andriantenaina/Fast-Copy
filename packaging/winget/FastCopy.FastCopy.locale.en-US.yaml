@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+# Template - see FastCopy.FastCopy.yaml.
+PackageIdentifier: FastCopy.FastCopy
+PackageVersion: "{{VERSION}}"
+PackageLocale: en-US
+Publisher: Fast Copy contributors
+PublisherUrl: "https://github.com/{{REPO}}"
+PublisherSupportUrl: "https://github.com/{{REPO}}/issues"
+PackageName: Fast Copy
+PackageUrl: "https://github.com/{{REPO}}"
+License: MIT OR Apache-2.0
+LicenseUrl: "https://github.com/{{REPO}}/blob/HEAD/LICENSE-MIT"
+ShortDescription: Fast, verified, resumable file copies.
+Description: |-
+  Fast Copy copies and moves files very fast with zero data loss: end-to-end verification,
+  crash-safe resume, FAT32 splitting and exFAT formatting. Integrates with the File Explorer
+  context menu (including the Windows 11 top-level menu).
+Moniker: fastcopy
+Tags:
+  - copy
+  - file-copy
+  - move
+  - backup
+  - explorer
+ReleaseNotesUrl: "https://github.com/{{REPO}}/releases/tag/v{{VERSION}}"
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

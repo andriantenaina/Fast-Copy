@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fast Copy",
+  "mainBinaryName": "fast-copy",
+  "identifier": "mg.fastcopy.desktop",
+  "build": {
+    "beforeDevCommand": "node scripts/prepare-sidecar.mjs --debug && npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "node scripts/prepare-sidecar.mjs && npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Fast Copy",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 860,
+        "minHeight": 600,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "resizable": true,
+        "visible": false,
+        "dragDropEnabled": true,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "dmg", "app"],
+    "publisher": "Fast Copy contributors",
+    "copyright": "MIT OR Apache-2.0",
+    "category": "Utility",
+    "shortDescription": "Fast, verified, resumable file copies",
+    "longDescription": "Fast Copy copies and moves files very fast with zero data loss: verification, crash-safe resume, FAT32 splitting and exFAT formatting.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/fc-helper"],
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper" },
+      "nsis": { "installMode": "currentUser", "languages": ["French", "English"], "displayLanguageSelector": false },
+      "wix": { "language": ["fr-FR", "en-US"] }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}

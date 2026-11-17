@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.9.0.schema.json
+# Template: {{...}} placeholders are filled by .github/workflows/release.yml (attached to the
+# draft release as fast-copy-packaging-manifests-<version>.tar.gz). Submit to
+# microsoft/winget-pkgs under manifests/f/FastCopy/FastCopy/<version>/ (e.g. with `wingetcreate submit`).
+# Change PackageIdentifier/Publisher if you publish under another name.
+PackageIdentifier: FastCopy.FastCopy
+PackageVersion: "{{VERSION}}"
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.9.0

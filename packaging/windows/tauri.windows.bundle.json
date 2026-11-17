@@ -1,0 +1,14 @@
+{
+  "bundle": {
+    "resources": {
+      "../../target/release/fc_shellext_win.dll": "fc_shellext_win.dll",
+      "../../packaging/windows/out/FastCopy.msix": "FastCopy.msix",
+      "../../target/release/fcopy.exe": "fcopy.exe"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "../../packaging/windows/installer-hooks.nsh"
+      }
+    }
+  }
+}

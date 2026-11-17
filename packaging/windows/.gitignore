@@ -1,0 +1,3 @@
+# build-sparse.ps1 output (FastCopy.msix, staging dir, dev certificates)
+out/
+*.pfx
