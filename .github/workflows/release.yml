@@ -263,13 +263,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $ws = $env:GITHUB_WORKSPACE -replace '\\', '/'
+          # fc_shellext_win.dll, fcopy.exe and the NSIS hooks are already declared (relative paths)
+          # in app/src-tauri/tauri.windows.conf.json; declaring them again here under another path
+          # makes WiX install the same file twice (ICE30). Only the MSIX is added.
           $cfg = @{
             bundle = @{
               resources = @{
-                "$ws/target/release/fc_shellext_win.dll" = 'fc_shellext_win.dll'
                 "$ws/packaging/windows/out/FastCopy.msix" = 'FastCopy.msix'
               }
-              windows = @{ nsis = @{ installerHooks = "$ws/packaging/windows/installer-hooks.nsh" } }
+              windows = @{}
             }
           }
           if ($env:HAS_WIN_CERT -eq 'true') {

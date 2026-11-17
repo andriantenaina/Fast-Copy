@@ -13,7 +13,7 @@ Fast Copy integrates with File Explorer at two levels:
 |------|------|
 | `sparse/AppxManifest.xml` | sparse package manifest (`uap10:AllowExternalContent`, `desktop4/desktop5` File Explorer verbs, `com:SurrogateServer`) |
 | `sparse/Assets/*.png` | fallback logos (placeholder "»" icon). `build-sparse.ps1` uses `app/src-tauri/icons/{Square44x44Logo,Square150x150Logo,StoreLogo}.png` (Tauri-generated) when they exist |
-| `tauri.windows.bundle.json` | the same JSON as below; the release workflow merges it with `tauri build --config` (absolute paths), so releases are correct even before the GUI owner wires it |
+| `tauri.windows.bundle.json` | reference copy of the Windows bundle config (DLL, `fcopy.exe`, MSIX, NSIS hooks); `app/src-tauri/tauri.windows.conf.json` declares everything but the MSIX, which the release workflow adds with `tauri build --config` |
 | `build-sparse.ps1` | stage manifest → `MakeAppx pack /nv` → `SignTool sign` (PFX, or `-SelfSigned` dev cert) |
 | `register-sparse.ps1` / `unregister-sparse.ps1` | `Add-AppxPackage -Path FastCopy.msix -ExternalLocation <installdir>` / `Remove-AppxPackage` (dev / manual use) |
 | `installer-hooks.nsh` | Tauri v2 NSIS hooks (`NSIS_HOOK_POSTINSTALL`, `NSIS_HOOK_PREUNINSTALL`) |
