@@ -24,7 +24,9 @@ pub struct AppClipboard {
 }
 
 fn data_dir() -> PathBuf {
-    dirs::data_local_dir().unwrap_or_else(std::env::temp_dir).join("FastCopy")
+    dirs::data_local_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("FastCopy")
 }
 
 pub fn clipboard_path() -> PathBuf {
@@ -35,11 +37,15 @@ pub fn set_app_clipboard(mode: Mode, paths: Vec<PathBuf>) -> Result<()> {
     let c = AppClipboard {
         mode,
         paths,
-        time_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0),
+        time_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0),
         sys_seq: system_clipboard_seq(),
     };
     std::fs::create_dir_all(data_dir()).map_err(|e| Error::io("création", data_dir(), e))?;
-    std::fs::write(clipboard_path(), serde_json::to_vec(&c).unwrap()).map_err(|e| Error::io("écriture", clipboard_path(), e))
+    std::fs::write(clipboard_path(), serde_json::to_vec(&c).unwrap())
+        .map_err(|e| Error::io("écriture", clipboard_path(), e))
 }
 
 pub fn get_app_clipboard() -> Option<AppClipboard> {
@@ -116,7 +122,10 @@ pub fn system_clipboard_files() -> Option<(Vec<PathBuf>, Mode)> {
             }
         }
         let mut mode = Mode::Copy;
-        let fmt_name: Vec<u16> = "Preferred DropEffect".encode_utf16().chain(Some(0)).collect();
+        let fmt_name: Vec<u16> = "Preferred DropEffect"
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
         let fmt = RegisterClipboardFormatW(fmt_name.as_ptr());
         if fmt != 0 {
             let hd = GetClipboardData(fmt);
@@ -154,9 +163,19 @@ pub struct Labels {
 
 pub fn labels(lang: &str) -> Labels {
     if lang.starts_with("fr") {
-        Labels { copy: "Copier avec Fast Copy", moves: "Déplacer avec Fast Copy", paste: "Coller ici avec Fast Copy", send_to: "Fast Copy" }
+        Labels {
+            copy: "Copier avec Fast Copy",
+            moves: "Déplacer avec Fast Copy",
+            paste: "Coller ici avec Fast Copy",
+            send_to: "Fast Copy",
+        }
     } else {
-        Labels { copy: "Copy with Fast Copy", moves: "Move with Fast Copy", paste: "Paste here with Fast Copy", send_to: "Fast Copy" }
+        Labels {
+            copy: "Copy with Fast Copy",
+            moves: "Move with Fast Copy",
+            paste: "Paste here with Fast Copy",
+            send_to: "Fast Copy",
+        }
     }
 }
 
@@ -184,7 +203,10 @@ pub fn system_lang() -> String {
     }
     #[cfg(target_os = "macos")]
     {
-        if let Ok(out) = std::process::Command::new("defaults").args(["read", "-g", "AppleLanguages"]).output() {
+        if let Ok(out) = std::process::Command::new("defaults")
+            .args(["read", "-g", "AppleLanguages"])
+            .output()
+        {
             let s = String::from_utf8_lossy(&out.stdout);
             if let Some(first) = s.split('"').nth(1) {
                 return first[..2.min(first.len())].to_lowercase();
@@ -209,7 +231,10 @@ mod imp {
         (r"Software\Classes\Directory\shell\FastCopy.Copy", "copy"),
         (r"Software\Classes\Directory\shell\FastCopy.Move", "move"),
         (r"Software\Classes\Directory\shell\FastCopy.Paste", "paste"),
-        (r"Software\Classes\Directory\Background\shell\FastCopy.Paste", "paste-bg"),
+        (
+            r"Software\Classes\Directory\Background\shell\FastCopy.Paste",
+            "paste-bg",
+        ),
         (r"Software\Classes\Drive\shell\FastCopy.Paste", "paste"),
     ];
 
@@ -217,18 +242,41 @@ mod imp {
         let k = wide(OsStr::new(key));
         let mut h: HKEY = std::ptr::null_mut();
         // SAFETY: valid strings; key closed below.
-        let r = unsafe { RegCreateKeyExW(HKEY_CURRENT_USER, k.as_ptr(), 0, std::ptr::null(), 0, KEY_WRITE, std::ptr::null(), &mut h, std::ptr::null_mut()) };
+        let r = unsafe {
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                k.as_ptr(),
+                0,
+                std::ptr::null(),
+                0,
+                KEY_WRITE,
+                std::ptr::null(),
+                &mut h,
+                std::ptr::null_mut(),
+            )
+        };
         if r != 0 {
-            return Err(Error::Other(format!("registre : création de {key} (code {r})")));
+            return Err(Error::Other(format!(
+                "registre : création de {key} (code {r})"
+            )));
         }
         let n = name.map(|n| wide(OsStr::new(n)));
         let v = wide(OsStr::new(value));
         let r = unsafe {
-            RegSetValueExW(h, n.as_ref().map_or(std::ptr::null(), |n| n.as_ptr()), 0, REG_SZ, v.as_ptr() as *const u8, (v.len() * 2) as u32)
+            RegSetValueExW(
+                h,
+                n.as_ref().map_or(std::ptr::null(), |n| n.as_ptr()),
+                0,
+                REG_SZ,
+                v.as_ptr() as *const u8,
+                (v.len() * 2) as u32,
+            )
         };
         unsafe { RegCloseKey(h) };
         if r != 0 {
-            return Err(Error::Other(format!("registre : écriture dans {key} (code {r})")));
+            return Err(Error::Other(format!(
+                "registre : écriture dans {key} (code {r})"
+            )));
         }
         Ok(())
     }
@@ -247,7 +295,9 @@ mod imp {
     }
 
     fn send_to_link() -> PathBuf {
-        dirs::data_dir().unwrap_or_default().join(r"Microsoft\Windows\SendTo\Fast Copy.lnk")
+        dirs::data_dir()
+            .unwrap_or_default()
+            .join(r"Microsoft\Windows\SendTo\Fast Copy.lnk")
     }
 
     pub fn install(app: &Path, lang: &str) -> Result<()> {
@@ -260,12 +310,20 @@ mod imp {
                 "paste" => (l.paste, "\"%1\""),
                 _ => (l.paste, "\"%V\""),
             };
-            let cmd_verb = if verb.starts_with("paste") { "paste" } else { verb };
+            let cmd_verb = if verb.starts_with("paste") {
+                "paste"
+            } else {
+                verb
+            };
             set(key, None, label)?;
             set(key, Some("MUIVerb"), label)?;
             set(key, Some("Icon"), &format!("\"{exe}\",0"))?;
             set(key, Some("MultiSelectModel"), "Player")?;
-            set(&format!(r"{key}\command"), None, &format!("\"{exe}\" --shell {cmd_verb} {arg}"))?;
+            set(
+                &format!(r"{key}\command"),
+                None,
+                &format!("\"{exe}\" --shell {cmd_verb} {arg}"),
+            )?;
         }
         // Send To shortcut through the WScript.Shell COM object.
         let link = send_to_link();
@@ -301,7 +359,14 @@ mod imp {
 
     fn refresh() {
         // SAFETY: notification without items.
-        unsafe { SHChangeNotify(SHCNE_ASSOCCHANGED as i32, 0, std::ptr::null(), std::ptr::null()) };
+        unsafe {
+            SHChangeNotify(
+                SHCNE_ASSOCCHANGED as i32,
+                0,
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
     }
 }
 
@@ -310,20 +375,33 @@ mod imp {
     use super::*;
 
     fn services_dir() -> PathBuf {
-        dirs::home_dir().unwrap_or_default().join("Library/Services")
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join("Library/Services")
     }
 
     fn workflows(lang: &str) -> Vec<(String, &'static str, bool)> {
         let l = labels(lang);
-        vec![(l.copy.to_string(), "copy", false), (l.moves.to_string(), "move", false), (l.paste.to_string(), "paste", true)]
+        vec![
+            (l.copy.to_string(), "copy", false),
+            (l.moves.to_string(), "move", false),
+            (l.paste.to_string(), "paste", true),
+        ]
     }
 
     fn xml_escape(s: &str) -> String {
-        s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
     }
 
     fn info_plist(label: &str, folders_only: bool) -> String {
-        let types = if folders_only { "<string>public.folder</string>" } else { "<string>public.item</string>" };
+        let types = if folders_only {
+            "<string>public.folder</string>"
+        } else {
+            "<string>public.item</string>"
+        };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -348,7 +426,11 @@ mod imp {
     }
 
     fn document_wflow(command: &str, folders_only: bool) -> String {
-        let input = if folders_only { "com.apple.Automator.folder" } else { "com.apple.Automator.fileSystemObject" };
+        let input = if folders_only {
+            "com.apple.Automator.folder"
+        } else {
+            "com.apple.Automator.fileSystemObject"
+        };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -447,10 +529,14 @@ mod imp {
             let wf = dir.join(bundle_name(&label)).join("Contents");
             std::fs::create_dir_all(&wf).map_err(|e| Error::io("création", &wf, e))?;
             let cmd = format!("\"{exe}\" --shell {verb} \"$@\" >/dev/null 2>&1 &");
-            std::fs::write(wf.join("Info.plist"), info_plist(&label, folders)).map_err(|e| Error::io("écriture", &wf, e))?;
-            std::fs::write(wf.join("document.wflow"), document_wflow(&cmd, folders)).map_err(|e| Error::io("écriture", &wf, e))?;
+            std::fs::write(wf.join("Info.plist"), info_plist(&label, folders))
+                .map_err(|e| Error::io("écriture", &wf, e))?;
+            std::fs::write(wf.join("document.wflow"), document_wflow(&cmd, folders))
+                .map_err(|e| Error::io("écriture", &wf, e))?;
         }
-        let _ = std::process::Command::new("/System/Library/CoreServices/pbs").arg("-update").status();
+        let _ = std::process::Command::new("/System/Library/CoreServices/pbs")
+            .arg("-update")
+            .status();
         Ok(())
     }
 
@@ -460,12 +546,16 @@ mod imp {
                 let _ = std::fs::remove_dir_all(services_dir().join(bundle_name(&label)));
             }
         }
-        let _ = std::process::Command::new("/System/Library/CoreServices/pbs").arg("-update").status();
+        let _ = std::process::Command::new("/System/Library/CoreServices/pbs")
+            .arg("-update")
+            .status();
         Ok(())
     }
 
     pub fn is_installed() -> bool {
-        ["fr", "en"].iter().any(|l| services_dir().join(bundle_name(labels(l).copy)).exists())
+        ["fr", "en"]
+            .iter()
+            .any(|l| services_dir().join(bundle_name(labels(l).copy)).exists())
     }
 }
 
@@ -473,7 +563,9 @@ mod imp {
 mod imp {
     use super::*;
     pub fn install(_app: &Path, _lang: &str) -> Result<()> {
-        Err(Error::Other("intégration non prise en charge sur ce système".into()))
+        Err(Error::Other(
+            "intégration non prise en charge sur ce système".into(),
+        ))
     }
     pub fn uninstall() -> Result<()> {
         Ok(())
@@ -489,10 +581,17 @@ mod imp {
 pub fn add_to_user_path(dir: &Path) -> Result<bool> {
     let cur = path_env::read();
     let d = dir.display().to_string();
-    if cur.split(';').any(|p| p.trim_end_matches('\\').eq_ignore_ascii_case(d.trim_end_matches('\\'))) {
+    if cur.split(';').any(|p| {
+        p.trim_end_matches('\\')
+            .eq_ignore_ascii_case(d.trim_end_matches('\\'))
+    }) {
         return Ok(false);
     }
-    let new = if cur.trim().is_empty() { d } else { format!("{};{d}", cur.trim_end_matches(';')) };
+    let new = if cur.trim().is_empty() {
+        d
+    } else {
+        format!("{};{d}", cur.trim_end_matches(';'))
+    };
     path_env::write(&new)?;
     Ok(true)
 }
@@ -504,7 +603,12 @@ pub fn remove_from_user_path(dir: &Path) -> Result<bool> {
     let d = dir.display().to_string();
     let kept: Vec<&str> = cur
         .split(';')
-        .filter(|p| !p.is_empty() && !p.trim_end_matches('\\').eq_ignore_ascii_case(d.trim_end_matches('\\')))
+        .filter(|p| {
+            !p.is_empty()
+                && !p
+                    .trim_end_matches('\\')
+                    .eq_ignore_ascii_case(d.trim_end_matches('\\'))
+        })
         .collect();
     let new = kept.join(";");
     if new == cur.trim_end_matches(';') {
@@ -520,7 +624,9 @@ mod path_env {
     use crate::sys::wide;
     use std::ffi::OsStr;
     use windows_sys::Win32::System::Registry::*;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+    };
 
     pub fn read() -> String {
         let key = wide(OsStr::new("Environment"));
@@ -529,7 +635,15 @@ mod path_env {
         let mut size = (buf.len() * 2) as u32;
         // SAFETY: valid buffers; RRF_NOEXPAND keeps %VARS% unexpanded.
         let r = unsafe {
-            RegGetValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr(), RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND, std::ptr::null_mut(), buf.as_mut_ptr() as *mut _, &mut size)
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                name.as_ptr(),
+                RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND,
+                std::ptr::null_mut(),
+                buf.as_mut_ptr() as *mut _,
+                &mut size,
+            )
         };
         if r != 0 {
             return String::new();
@@ -548,15 +662,36 @@ mod path_env {
         }
         let name = wide(OsStr::new("Path"));
         let v = wide(OsStr::new(value));
-        let r = unsafe { RegSetValueExW(h, name.as_ptr(), 0, REG_EXPAND_SZ, v.as_ptr() as *const u8, (v.len() * 2) as u32) };
+        let r = unsafe {
+            RegSetValueExW(
+                h,
+                name.as_ptr(),
+                0,
+                REG_EXPAND_SZ,
+                v.as_ptr() as *const u8,
+                (v.len() * 2) as u32,
+            )
+        };
         unsafe { RegCloseKey(h) };
         if r != 0 {
-            return Err(Error::Other(format!("registre : écriture de Path (code {r})")));
+            return Err(Error::Other(format!(
+                "registre : écriture de Path (code {r})"
+            )));
         }
         let env = wide(OsStr::new("Environment"));
         let mut res = 0usize;
         // Tell Explorer / new terminals that the environment changed.
-        unsafe { SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, env.as_ptr() as isize, SMTO_ABORTIFHUNG, 2000, &mut res) };
+        unsafe {
+            SendMessageTimeoutW(
+                HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                0,
+                env.as_ptr() as isize,
+                SMTO_ABORTIFHUNG,
+                2000,
+                &mut res,
+            )
+        };
         Ok(())
     }
 }

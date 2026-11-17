@@ -36,18 +36,33 @@ fn yes() -> bool {
 }
 
 /// Run blocking work (disk queries, journals, child processes) off the main thread.
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> CmdResult<T> + Send + 'static) -> CmdResult<T> {
-    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn list_volumes() -> CmdResult<Vec<VolumeView>> {
-    blocking(|| Ok(fc_core::volume::list_volumes().iter().map(VolumeView::from).collect())).await
+    blocking(|| {
+        Ok(fc_core::volume::list_volumes()
+            .iter()
+            .map(VolumeView::from)
+            .collect())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn volume_info(path: PathBuf) -> CmdResult<VolumeView> {
-    blocking(move || fc_core::volume::volume_info(&path).map(|v| VolumeView::from(&v)).map_err(|e| e.to_string())).await
+    blocking(move || {
+        fc_core::volume::volume_info(&path)
+            .map(|v| VolumeView::from(&v))
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -65,9 +80,19 @@ pub async fn plan_job(state: State<'_, AppState>, spec: SpecInput) -> CmdResult<
 
 #[tauri::command]
 pub fn start_plan(state: State<'_, AppState>, plan_id: String, force: bool) -> CmdResult<String> {
-    let plan = state.plans.lock().unwrap().remove(&plan_id).ok_or_else(|| "plan expired".to_string())?;
+    let plan = state
+        .plans
+        .lock()
+        .unwrap()
+        .remove(&plan_id)
+        .ok_or_else(|| "plan expired".to_string())?;
     if !force && !plan.blocking_issues().is_empty() {
-        let msg = plan.blocking_issues().iter().map(|i| i.message.clone()).collect::<Vec<_>>().join(" ; ");
+        let msg = plan
+            .blocking_issues()
+            .iter()
+            .map(|i| i.message.clone())
+            .collect::<Vec<_>>()
+            .join(" ; ");
         state.plans.lock().unwrap().insert(plan_id, plan);
         return Err(msg);
     }
@@ -86,7 +111,13 @@ pub fn resume_job(state: State<'_, AppState>, id: String) {
 
 #[tauri::command]
 pub fn cancel_job(state: State<'_, AppState>, id: String) {
-    let running = state.queue.list().iter().any(|e| e.id == id && matches!(e.state, fc_core::queue::QueueState::Running | fc_core::queue::QueueState::Paused));
+    let running = state.queue.list().iter().any(|e| {
+        e.id == id
+            && matches!(
+                e.state,
+                fc_core::queue::QueueState::Running | fc_core::queue::QueueState::Paused
+            )
+    });
     state.queue.cancel(&id);
     if running {
         state.requests.release_all();
@@ -109,13 +140,31 @@ pub fn list_queue(state: State<'_, AppState>) -> Vec<QueueEntry> {
 }
 
 #[tauri::command]
-pub fn resolve_conflict(state: State<'_, AppState>, request_id: u64, decision: ConflictAnswer) -> bool {
-    let action = if decision.action == OnConflict::Ask { OnConflict::Skip } else { decision.action };
-    state.requests.resolve_conflict(request_id, ConflictDecision { action, apply_to_all: decision.apply_to_all })
+pub fn resolve_conflict(
+    state: State<'_, AppState>,
+    request_id: u64,
+    decision: ConflictAnswer,
+) -> bool {
+    let action = if decision.action == OnConflict::Ask {
+        OnConflict::Skip
+    } else {
+        decision.action
+    };
+    state.requests.resolve_conflict(
+        request_id,
+        ConflictDecision {
+            action,
+            apply_to_all: decision.apply_to_all,
+        },
+    )
 }
 
 #[tauri::command]
-pub fn resolve_disk_full(state: State<'_, AppState>, request_id: u64, action: DiskFullAction) -> bool {
+pub fn resolve_disk_full(
+    state: State<'_, AppState>,
+    request_id: u64,
+    action: DiskFullAction,
+) -> bool {
     state.requests.resolve_disk_full(request_id, action)
 }
 
@@ -126,7 +175,12 @@ pub fn pending_requests(state: State<'_, AppState>) -> Vec<PendingRequest> {
 
 #[tauri::command]
 pub async fn format_drive(request: FormatRequest) -> CmdResult<VolumeView> {
-    blocking(move || fc_core::format::format_exfat(&request).map(|v| VolumeView::from(&v)).map_err(|e| e.to_string())).await
+    blocking(move || {
+        fc_core::format::format_exfat(&request)
+            .map(|v| VolumeView::from(&v))
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -172,14 +226,23 @@ pub struct PasteSource {
 
 #[tauri::command]
 pub fn paste_source() -> Option<PasteSource> {
-    fc_core::shell::paste_source().map(|(p, mode)| PasteSource { paths: p.iter().map(|x| x.display().to_string()).collect(), mode })
+    fc_core::shell::paste_source().map(|(p, mode)| PasteSource {
+        paths: p.iter().map(|x| x.display().to_string()).collect(),
+        mode,
+    })
 }
 
 /// Interrupted jobs that can be resumed (excluding those currently in the queue).
 #[tauri::command]
 pub async fn list_jobs(state: State<'_, AppState>) -> CmdResult<Vec<JobSummary>> {
     let queued: Vec<String> = state.queue.list().into_iter().map(|e| e.id).collect();
-    blocking(move || Ok(journal::list_jobs().into_iter().filter(|j| j.resumable() && !queued.contains(&j.id)).collect())).await
+    blocking(move || {
+        Ok(journal::list_jobs()
+            .into_iter()
+            .filter(|j| j.resumable() && !queued.contains(&j.id))
+            .collect())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -188,7 +251,8 @@ pub async fn resume_stored_job(state: State<'_, AppState>, id: String) -> CmdRes
         return Err("already queued".into());
     }
     let path = journal::journal_path(&id);
-    let (plan, st) = blocking(move || journal::Journal::load(&path).map_err(|e| e.to_string())).await?;
+    let (plan, st) =
+        blocking(move || journal::Journal::load(&path).map_err(|e| e.to_string())).await?;
     Ok(state.queue.enqueue_resume(plan, st))
 }
 
@@ -203,7 +267,11 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 }
 
 #[tauri::command]
-pub fn set_settings(app: AppHandle, state: State<'_, AppState>, settings: Settings) -> CmdResult<()> {
+pub fn set_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: Settings,
+) -> CmdResult<()> {
     settings.save()?;
     let lang_changed = state.settings.lock().unwrap().lang != settings.lang;
     *state.settings.lock().unwrap() = settings;

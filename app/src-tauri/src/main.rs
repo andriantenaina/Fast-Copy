@@ -76,7 +76,12 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, ev| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = ev
+            {
                 show_main_window(tray.app_handle());
             }
         });
@@ -103,7 +108,14 @@ fn apply_window_effect(window: &tauri::WebviewWindow) -> &'static str {
     #[cfg(target_os = "macos")]
     {
         use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState};
-        if window_vibrancy::apply_vibrancy(window, NSVisualEffectMaterial::UnderWindowBackground, Some(NSVisualEffectState::Active), None).is_ok() {
+        if window_vibrancy::apply_vibrancy(
+            window,
+            NSVisualEffectMaterial::UnderWindowBackground,
+            Some(NSVisualEffectState::Active),
+            None,
+        )
+        .is_ok()
+        {
             return "vibrancy";
         }
     }
@@ -115,7 +127,10 @@ fn main() {
     let argv: Vec<String> = std::env::args().collect();
 
     // Installer hooks: register / unregister the shell integration, then exit.
-    if argv.iter().any(|a| a == "--register-shell" || a == "--unregister-shell") {
+    if argv
+        .iter()
+        .any(|a| a == "--register-shell" || a == "--unregister-shell")
+    {
         let code = if argv.iter().any(|a| a == "--register-shell") {
             let exe = std::env::current_exe().unwrap_or_default();
             let lang = settings::Settings::load().resolved_lang();
@@ -128,7 +143,11 @@ fn main() {
             fc_core::shell::install(&exe, &lang)
         } else {
             #[cfg(windows)]
-            if let Some(dir) = std::env::current_exe().ok().as_deref().and_then(|e| e.parent()) {
+            if let Some(dir) = std::env::current_exe()
+                .ok()
+                .as_deref()
+                .and_then(|e| e.parent())
+            {
                 let _ = fc_core::shell::remove_from_user_path(dir);
             }
             fc_core::shell::uninstall()
@@ -229,9 +248,16 @@ fn main() {
         // Files dropped on the Dock icon / "Open with Fast Copy" in Finder.
         #[cfg(target_os = "macos")]
         RunEvent::Opened { urls } => {
-            let paths: Vec<std::path::PathBuf> = urls.iter().filter_map(|u| u.to_file_path().ok()).collect();
+            let paths: Vec<std::path::PathBuf> =
+                urls.iter().filter_map(|u| u.to_file_path().ok()).collect();
             if !paths.is_empty() {
-                app.state::<Aggregator>().submit(app, cli::Request { verb: cli::Verb::SendTo, paths });
+                app.state::<Aggregator>().submit(
+                    app,
+                    cli::Request {
+                        verb: cli::Verb::SendTo,
+                        paths,
+                    },
+                );
             }
         }
         #[cfg(target_os = "macos")]

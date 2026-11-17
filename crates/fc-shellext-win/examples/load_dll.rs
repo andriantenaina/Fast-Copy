@@ -184,6 +184,16 @@ mod win {
         let dir = std::env::temp_dir().join(format!("fc-shellext-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("data")).map_err(|e| e.to_string())?;
+        // %TEMP% can be an 8.3 short path (CI: C:\Users\RUNNER~1\...) while the Shell hands the
+        // DLL long paths: resolve to the long form (minus the \\?\ prefix) so paths compare equal.
+        let dir = {
+            let c = std::fs::canonicalize(&dir).map_err(|e| e.to_string())?;
+            let s = c.to_string_lossy();
+            match s.strip_prefix(r"\\?\") {
+                Some(rest) if !rest.starts_with("UNC\\") => PathBuf::from(rest),
+                _ => c,
+            }
+        };
         let dll = dir.join("fc_shellext_win.dll");
         std::fs::copy(&src_dll, &dll).map_err(|e| format!("copy {}: {e}", src_dll.display()))?;
         std::fs::copy(&me, dir.join("fast-copy.exe")).map_err(|e| e.to_string())?;
@@ -246,10 +256,22 @@ mod win {
             // Flat top-level classes registered by the sparse package.
             println!("\n[flat CLSIDs] one top-level entry each:");
             let flat: [(u128, &str); 4] = [
-                (0x5ac697db_2a91_47ae_9df4_83d916bf7025, "Copier avec Fast Copy|Copy with Fast Copy"),
-                (0x11ffd5d3_8a78_4a65_a664_449cd515a7a0, "Déplacer avec Fast Copy|Move with Fast Copy"),
-                (0x0c57fa8b_4d91_4528_b75d_62e16cceb676, "Coller ici avec Fast Copy|Paste here with Fast Copy"),
-                (0x1cc48706_c26d_4b46_b786_28a0942ab45e, "Coller ici avec Fast Copy|Paste here with Fast Copy"),
+                (
+                    0x5ac697db_2a91_47ae_9df4_83d916bf7025,
+                    "Copier avec Fast Copy|Copy with Fast Copy",
+                ),
+                (
+                    0x11ffd5d3_8a78_4a65_a664_449cd515a7a0,
+                    "Déplacer avec Fast Copy|Move with Fast Copy",
+                ),
+                (
+                    0x0c57fa8b_4d91_4528_b75d_62e16cceb676,
+                    "Coller ici avec Fast Copy|Paste here with Fast Copy",
+                ),
+                (
+                    0x1cc48706_c26d_4b46_b786_28a0942ab45e,
+                    "Coller ici avec Fast Copy|Paste here with Fast Copy",
+                ),
             ];
             for (id, titles) in flat {
                 let cmd = make(&GUID::from_u128(id))?;
@@ -260,7 +282,10 @@ mod win {
                 check(flags == 0, "flat entry has no sub-menu (ECF_DEFAULT)")?;
             }
             let copy = make(&GUID::from_u128(flat[0].0))?;
-            check(copy.GetState(Some(&two), true).map_err(|e| e.to_string())? == 0, "flat copy enabled on 2 files")?;
+            check(
+                copy.GetState(Some(&two), true).map_err(|e| e.to_string())? == 0,
+                "flat copy enabled on 2 files",
+            )?;
 
             println!("\n[items CLSID] root, 2 files selected:");
             let root = make(&CLSID_ITEMS)?;

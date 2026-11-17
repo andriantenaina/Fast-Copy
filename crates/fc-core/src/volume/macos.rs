@@ -7,11 +7,14 @@ use std::process::Command;
 
 fn cstr_field(f: &[libc::c_char]) -> String {
     // SAFETY: statfs strings are NUL-terminated within the array.
-    unsafe { CStr::from_ptr(f.as_ptr()) }.to_string_lossy().into_owned()
+    unsafe { CStr::from_ptr(f.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn statfs(p: &Path) -> io::Result<libc::statfs> {
-    let c = CString::new(p.as_os_str().as_bytes()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+    let c = CString::new(p.as_os_str().as_bytes())
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
     let mut s: libc::statfs = unsafe { std::mem::zeroed() };
     // SAFETY: valid path and out struct.
     if unsafe { libc::statfs(c.as_ptr(), &mut s) } != 0 {
@@ -22,11 +25,16 @@ fn statfs(p: &Path) -> io::Result<libc::statfs> {
 
 /// `diskutil info -plist <dev>` as a dictionary.
 pub(crate) fn diskutil_info(dev: &str) -> Option<plist::Dictionary> {
-    let out = Command::new("/usr/sbin/diskutil").args(["info", "-plist", dev]).output().ok()?;
+    let out = Command::new("/usr/sbin/diskutil")
+        .args(["info", "-plist", dev])
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
-    plist::Value::from_reader_xml(&out.stdout[..]).ok()?.into_dictionary()
+    plist::Value::from_reader_xml(&out.stdout[..])
+        .ok()?
+        .into_dictionary()
 }
 
 fn dict_bool(d: &plist::Dictionary, k: &str) -> Option<bool> {
@@ -49,7 +57,10 @@ pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
     let mut info = VolumeInfo {
         root: root.clone(),
         fs: FsKind::from_name(&fsname),
-        label: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        label: root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         total_bytes: s.f_blocks as u64 * s.f_bsize as u64,
         free_bytes: s.f_bavail as u64 * s.f_bsize as u64,
         cluster_size: (s.f_bsize as u64).max(512),
@@ -91,7 +102,10 @@ pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
                     info.label = name;
                 }
             }
-            if let Some(b) = d.get("VolumeAllocationBlockSize").and_then(|v| v.as_unsigned_integer()) {
+            if let Some(b) = d
+                .get("VolumeAllocationBlockSize")
+                .and_then(|v| v.as_unsigned_integer())
+            {
                 info.cluster_size = b.max(512);
             }
         }
@@ -120,13 +134,23 @@ pub fn list_volumes() -> Vec<VolumeInfo> {
 pub fn eject(volume: &Path) -> io::Result<()> {
     let info = volume_info(volume)?;
     if info.is_system {
-        return Err(io::Error::new(io::ErrorKind::PermissionDenied, "refus : disque système"));
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "refus : disque système",
+        ));
     }
-    let target = info.disk_id.clone().unwrap_or_else(|| volume.to_string_lossy().into_owned());
-    let out = Command::new("/usr/sbin/diskutil").args(["eject", &target]).output()?;
+    let target = info
+        .disk_id
+        .clone()
+        .unwrap_or_else(|| volume.to_string_lossy().into_owned());
+    let out = Command::new("/usr/sbin/diskutil")
+        .args(["eject", &target])
+        .output()?;
     if out.status.success() {
         Ok(())
     } else {
-        Err(io::Error::other(String::from_utf8_lossy(&out.stderr).trim().to_string()))
+        Err(io::Error::other(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
     }
 }

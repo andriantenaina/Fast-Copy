@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 /// Release builds fail loudly instead, so an empty helper/DLL/MSIX can never be shipped —
 /// unless `FASTCOPY_ALLOW_PLACEHOLDERS=1` is set (local experiments only).
 fn ensure(path: &Path, what: &str, how: &str) {
-    let ok = std::fs::metadata(path).map(|m| m.len() > 0).unwrap_or(false);
+    let ok = std::fs::metadata(path)
+        .map(|m| m.len() > 0)
+        .unwrap_or(false);
     println!("cargo:rerun-if-changed={}", path.display());
     if ok {
         return;
@@ -21,7 +23,10 @@ fn ensure(path: &Path, what: &str, how: &str) {
         }
         let _ = std::fs::write(path, b"");
     }
-    println!("cargo:warning={what} missing: using an empty placeholder at {} ({how})", path.display());
+    println!(
+        "cargo:warning={what} missing: using an empty placeholder at {} ({how})",
+        path.display()
+    );
 }
 
 fn main() {

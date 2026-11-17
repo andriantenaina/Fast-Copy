@@ -13,7 +13,11 @@ use fc_core::*;
 use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Parser)]
-#[command(name = "fcopy", version, about = "Fast Copy — copies rapides, vérifiées et reprenables / fast, verified, resumable copies")]
+#[command(
+    name = "fcopy",
+    version,
+    about = "Fast Copy — copies rapides, vérifiées et reprenables / fast, verified, resumable copies"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -191,11 +195,19 @@ fn run(cli: Cli) -> anyhow::Result<i32> {
         Cmd::Resume { id, json } => resume(id, json),
         Cmd::Jobs { discard } => jobs(discard),
         Cmd::Verify { src, dest } => verify_trees(&src, &dest),
-        Cmd::Split { file, dest_dir, chunk } => split_cmd(&file, &dest_dir, chunk),
+        Cmd::Split {
+            file,
+            dest_dir,
+            chunk,
+        } => split_cmd(&file, &dest_dir, chunk),
         Cmd::Join { input, dest_dir } => join_cmd(&input, dest_dir),
         Cmd::Drive { cmd } => drive(cmd),
         Cmd::Shell { cmd } => shell(cmd),
-        Cmd::Bench { src, dest_dir, compare } => bench(&src, &dest_dir, compare),
+        Cmd::Bench {
+            src,
+            dest_dir,
+            compare,
+        } => bench(&src, &dest_dir, compare),
     }
 }
 
@@ -205,7 +217,11 @@ fn copy(a: CopyArgs, force_move: bool) -> anyhow::Result<i32> {
     let mut paths = a.paths;
     let dest = paths.pop().expect("clap ensures ≥ 2");
     let mut spec = JobSpec::new(paths, dest);
-    spec.mode = if a.move_ || force_move { Mode::Move } else { Mode::Copy };
+    spec.mode = if a.move_ || force_move {
+        Mode::Move
+    } else {
+        Mode::Copy
+    };
     spec.verify = match a.verify {
         VerifyArg::Fast => VerifyMode::Fast,
         VerifyArg::Full => VerifyMode::Full,
@@ -217,7 +233,11 @@ fn copy(a: CopyArgs, force_move: bool) -> anyhow::Result<i32> {
         None if interactive => OnConflict::Ask,
         None => OnConflict::Skip,
     };
-    spec.split = if a.no_split { SplitMode::Never } else { SplitMode::Auto };
+    spec.split = if a.no_split {
+        SplitMode::Never
+    } else {
+        SplitMode::Auto
+    };
     spec.skip_junk = !a.keep_junk;
     spec.auto_join = !a.no_join;
     spec.use_vss = a.vss;
@@ -227,22 +247,43 @@ fn copy(a: CopyArgs, force_move: bool) -> anyhow::Result<i32> {
     if !a.json {
         print_plan(&plan);
     } else {
-        println!("{}", serde_json::json!({"type":"plan","id":plan.id,"files":plan.total_files,"bytes":plan.total_bytes,"issues":plan.issues,"profile":plan.profile.name}));
+        println!(
+            "{}",
+            serde_json::json!({"type":"plan","id":plan.id,"files":plan.total_files,"bytes":plan.total_bytes,"issues":plan.issues,"profile":plan.profile.name})
+        );
     }
     if a.dry_run {
-        return Ok(if plan.blocking_issues().is_empty() { 0 } else { 2 });
+        return Ok(if plan.blocking_issues().is_empty() {
+            0
+        } else {
+            2
+        });
     }
     if !plan.blocking_issues().is_empty() && !a.force {
         if !a.json {
             eprintln!("\nCopie bloquée. Corrigez les problèmes ci-dessus, ou relancez avec --force si vous êtes sûr.");
-            if plan.issues.iter().any(|i| matches!(i.kind, fc_core::plan::IssueKind::FileTooLarge { .. } | fc_core::plan::IssueKind::ReadOnlyDestination { .. })) {
+            if plan.issues.iter().any(|i| {
+                matches!(
+                    i.kind,
+                    fc_core::plan::IssueKind::FileTooLarge { .. }
+                        | fc_core::plan::IssueKind::ReadOnlyDestination { .. }
+                )
+            }) {
                 eprintln!("Astuce : `fcopy drive format {} --label MACLE` formate la clé en exFAT (lisible et inscriptible sur Windows et Mac).", plan.dst_volume.root.display());
             }
         }
         return Ok(2);
     }
-    let opts = job::ExecOptions { journal: !a.no_journal, force: a.force, ..Default::default() };
-    let report = execute_with_ui(|control, sink, ui| job::execute(&plan, control, sink, ui, opts), a.json, interactive)?;
+    let opts = job::ExecOptions {
+        journal: !a.no_journal,
+        force: a.force,
+        ..Default::default()
+    };
+    let report = execute_with_ui(
+        |control, sink, ui| job::execute(&plan, control, sink, ui, opts),
+        a.json,
+        interactive,
+    )?;
     let code = finish(&report, a.json);
     if a.eject && report.status != JobStatus::Cancelled {
         if !a.json {
@@ -323,9 +364,16 @@ fn prompt(bar: &Arc<Mutex<Option<ProgressBar>>>, text: &str) -> String {
 impl Interaction for CliUi {
     fn resolve_conflict(&self, i: &ConflictInfo) -> ConflictDecision {
         if !self.interactive {
-            return ConflictDecision { action: OnConflict::Skip, apply_to_all: true };
+            return ConflictDecision {
+                action: OnConflict::Skip,
+                apply_to_all: true,
+            };
         }
-        let newer = if i.src_mtime_ms > i.dst_mtime_ms { "source plus récente" } else { "destination plus récente ou identique" };
+        let newer = if i.src_mtime_ms > i.dst_mtime_ms {
+            "source plus récente"
+        } else {
+            "destination plus récente ou identique"
+        };
         let text = format!(
             "\n« {} » existe déjà.\n  source : {}  |  destination : {}  ({newer})\n  [r]emplacer  [i]gnorer  [g]arder les deux  [p]lus récent  [d]ifférent — MAJUSCULE = pour tous : ",
             i.path,
@@ -335,7 +383,12 @@ impl Interaction for CliUi {
         loop {
             let ans = prompt(&self.bar, &text);
             // Upper-case letter (or a trailing '!') = apply to all remaining conflicts.
-            let all = ans.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) || ans.ends_with('!');
+            let all = ans
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+                || ans.ends_with('!');
             let action = match ans.to_lowercase().trim_end_matches('!').chars().next() {
                 Some('r') => OnConflict::Overwrite,
                 Some('i') => OnConflict::Skip,
@@ -344,7 +397,10 @@ impl Interaction for CliUi {
                 Some('d') => OnConflict::IfDifferent,
                 _ => continue,
             };
-            return ConflictDecision { action, apply_to_all: all };
+            return ConflictDecision {
+                action,
+                apply_to_all: all,
+            };
         }
     }
 
@@ -410,7 +466,10 @@ fn execute_with_ui(
             Event::Progress(s) => {
                 pb.set_length(s.bytes_total);
                 pb.set_position(s.bytes_done);
-                let eta = s.eta_secs.map(|e| format!(" · {}", fmt_dur(e))).unwrap_or_default();
+                let eta = s
+                    .eta_secs
+                    .map(|e| format!(" · {}", fmt_dur(e)))
+                    .unwrap_or_default();
                 let pause = if s.paused { " ⏸" } else { "" };
                 pb.set_message(format!(
                     "{}/s{eta} · {}/{} fichiers{pause} · {}",
@@ -424,7 +483,10 @@ fn execute_with_ui(
             _ => {}
         }
     };
-    let ui = CliUi { bar: bar_slot.clone(), interactive };
+    let ui = CliUi {
+        bar: bar_slot.clone(),
+        interactive,
+    };
     let r = f(&control, &sink, &ui);
     if let Some(pb) = bar_slot.lock().unwrap().take() {
         pb.finish_and_clear();
@@ -441,7 +503,11 @@ fn finish(r: &Report, json: bool) -> i32 {
                 r.files_copied,
                 human_bytes(r.bytes_copied),
                 fmt_dur(r.elapsed_ms / 1000),
-                if r.files_skipped > 0 { format!(", {} ignoré(s)", r.files_skipped) } else { String::new() }
+                if r.files_skipped > 0 {
+                    format!(", {} ignoré(s)", r.files_skipped)
+                } else {
+                    String::new()
+                }
             ),
             JobStatus::CompletedWithErrors => println!(
                 "! Terminé avec {} erreur(s) : {} fichier(s) copié(s), {} ignoré(s)",
@@ -463,7 +529,10 @@ fn finish(r: &Report, json: bool) -> i32 {
             println!("  {} fichier(s) verrouillé(s) : relancez avec --vss pour les copier via un cliché instantané.", r.locked.len());
         }
         if r.status == JobStatus::CompletedWithErrors {
-            println!("  Les fichiers en erreur peuvent être retentés avec : fcopy resume {}", r.job_id);
+            println!(
+                "  Les fichiers en erreur peuvent être retentés avec : fcopy resume {}",
+                r.job_id
+            );
         }
     }
     match r.status {
@@ -510,7 +579,11 @@ fn resume(id: Option<String>, json: bool) -> anyhow::Result<i32> {
         println!("Reprise de la copie {id}…");
     }
     let interactive = std::io::stdin().is_terminal() && !json;
-    let report = execute_with_ui(|c, s, u| job::resume(&id, c, s, u, Default::default()), json, interactive)?;
+    let report = execute_with_ui(
+        |c, s, u| job::resume(&id, c, s, u, Default::default()),
+        json,
+        interactive,
+    )?;
     Ok(finish(&report, json))
 }
 
@@ -531,7 +604,11 @@ fn jobs(discard: Option<String>) -> anyhow::Result<i32> {
             j.done_files,
             j.total_files,
             human_bytes(j.total_bytes),
-            j.sources.iter().map(|s| s.display().to_string()).collect::<Vec<_>>().join(", "),
+            j.sources
+                .iter()
+                .map(|s| s.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
             j.dest.display(),
             j.ended.as_deref().unwrap_or("interrompue")
         );
@@ -547,7 +624,14 @@ fn verify_trees(src: &Path, dest: &Path) -> anyhow::Result<i32> {
     let stats = Stats::default();
     let warnings = Mutex::new(vec![]);
     let dst_fs = volume::detect(dest).fs;
-    let ctx = engine::Ctx { profile: &profile, control: &control, stats: &stats, verify: VerifyMode::Full, dst_fs: &dst_fs, warnings: &warnings };
+    let ctx = engine::Ctx {
+        profile: &profile,
+        control: &control,
+        stats: &stats,
+        verify: VerifyMode::Full,
+        dst_fs: &dst_fs,
+        warnings: &warnings,
+    };
     let mut checked = 0u64;
     let mut bad = 0u64;
     let base = dest.join(src.file_name().unwrap_or_default());
@@ -618,7 +702,9 @@ fn parse_size(s: &str) -> anyhow::Result<u64> {
         Some('G') => (&s[..s.len() - 1], 1024 * 1024 * 1024),
         _ => (&s[..], 1),
     };
-    let v: f64 = num.parse().with_context(|| format!("taille invalide « {s} »"))?;
+    let v: f64 = num
+        .parse()
+        .with_context(|| format!("taille invalide « {s} »"))?;
     Ok((v * mult as f64) as u64)
 }
 
@@ -635,7 +721,22 @@ fn split_cmd(file: &Path, dest_dir: &Path, chunk: Option<String>) -> anyhow::Res
     spec.split_chunk_override = Some(chunk);
     spec.on_conflict = OnConflict::Overwrite;
     let plan = fc_core::plan::build(&spec)?;
-    let report = execute_with_ui(|c, s, u| job::execute(&plan, c, s, u, job::ExecOptions { journal: false, ..Default::default() }), false, false)?;
+    let report = execute_with_ui(
+        |c, s, u| {
+            job::execute(
+                &plan,
+                c,
+                s,
+                u,
+                job::ExecOptions {
+                    journal: false,
+                    ..Default::default()
+                },
+            )
+        },
+        false,
+        false,
+    )?;
     Ok(finish(&report, false))
 }
 
@@ -644,7 +745,10 @@ fn join_cmd(input: &Path, dest_dir: Option<PathBuf>) -> anyhow::Result<i32> {
         input.to_path_buf()
     } else {
         let s = input.to_string_lossy();
-        let base = s.rsplit_once('.').map(|(b, _)| b.to_string()).unwrap_or_else(|| s.to_string());
+        let base = s
+            .rsplit_once('.')
+            .map(|(b, _)| b.to_string())
+            .unwrap_or_else(|| s.to_string());
         PathBuf::from(format!("{base}{}", split::MANIFEST_SUFFIX))
     };
     let m = split::SplitManifest::load(&manifest)?;
@@ -654,18 +758,38 @@ fn join_cmd(input: &Path, dest_dir: Option<PathBuf>) -> anyhow::Result<i32> {
     let final_path = dest_dir.join(&m.original_name);
     let dvol = volume::detect(&dest_dir);
     if m.total_size > dvol.fs.max_file_size() {
-        bail!("la destination ({}) ne peut pas contenir un fichier de {}", dvol.fs.label(), human_bytes(m.total_size));
+        bail!(
+            "la destination ({}) ne peut pas contenir un fichier de {}",
+            dvol.fs.label(),
+            human_bytes(m.total_size)
+        );
     }
     std::fs::create_dir_all(&dest_dir)?;
     let profile = fc_core::plan::Profile::choose(&volume::detect(&dir), &dvol, None);
     let control = Control::new();
     let stats = Stats::default();
     let warnings = Mutex::new(vec![]);
-    let ctx = engine::Ctx { profile: &profile, control: &control, stats: &stats, verify: VerifyMode::Full, dst_fs: &dvol.fs, warnings: &warnings };
-    println!("Recollage de {} ({} morceaux, {})…", m.original_name, parts.len(), human_bytes(m.total_size));
+    let ctx = engine::Ctx {
+        profile: &profile,
+        control: &control,
+        stats: &stats,
+        verify: VerifyMode::Full,
+        dst_fs: &dvol.fs,
+        warnings: &warnings,
+    };
+    println!(
+        "Recollage de {} ({} morceaux, {})…",
+        m.original_name,
+        parts.len(),
+        human_bytes(m.total_size)
+    );
     let w = engine::write_join(&ctx, &manifest, &parts, &final_path)?;
     engine::commit(&w.tmp, &final_path, false)?;
-    println!("✓ {} recollé et vérifié (SHA-256 {}).", final_path.display(), m.sha256);
+    println!(
+        "✓ {} recollé et vérifié (SHA-256 {}).",
+        final_path.display(),
+        m.sha256
+    );
     Ok(0)
 }
 
@@ -682,7 +806,11 @@ fn drive(cmd: DriveCmd) -> anyhow::Result<i32> {
                     human_bytes(v.free_bytes),
                     human_bytes(v.total_bytes),
                     format!("{:?}", v.bus).to_lowercase(),
-                    if v.label.is_empty() { String::new() } else { format!("« {} » ", v.label) },
+                    if v.label.is_empty() {
+                        String::new()
+                    } else {
+                        format!("« {} » ", v.label)
+                    },
                     v.model,
                     if v.is_system { "  [système]" } else { "" }
                 );
@@ -700,7 +828,12 @@ fn drive(cmd: DriveCmd) -> anyhow::Result<i32> {
             }
             Ok(0)
         }
-        DriveCmd::Format { path, label, cluster, yes } => {
+        DriveCmd::Format {
+            path,
+            label,
+            cluster,
+            yes,
+        } => {
             let v = volume::volume_info(&path)?;
             format::check_formattable(&v)?;
             let cluster = cluster.map(|c| parse_size(&c)).transpose()?;
@@ -715,7 +848,11 @@ fn drive(cmd: DriveCmd) -> anyhow::Result<i32> {
             );
             println!("⚠ TOUTES LES DONNÉES DE CE SUPPORT SERONT DÉFINITIVEMENT EFFACÉES.");
             if !yes {
-                let expected = if v.label.is_empty() { "EFFACER".to_string() } else { v.label.clone() };
+                let expected = if v.label.is_empty() {
+                    "EFFACER".to_string()
+                } else {
+                    v.label.clone()
+                };
                 eprint!("Tapez « {expected} » pour confirmer : ");
                 let _ = std::io::stderr().flush();
                 let mut s = String::new();
@@ -725,8 +862,17 @@ fn drive(cmd: DriveCmd) -> anyhow::Result<i32> {
                     return Ok(1);
                 }
             }
-            let nv = format::format_exfat(&format::FormatRequest { volume: path, label, cluster })?;
-            println!("✓ Formaté : {} ({}, {} libres).", nv.root.display(), nv.fs.label(), human_bytes(nv.free_bytes));
+            let nv = format::format_exfat(&format::FormatRequest {
+                volume: path,
+                label,
+                cluster,
+            })?;
+            println!(
+                "✓ Formaté : {} ({}, {} libres).",
+                nv.root.display(),
+                nv.fs.label(),
+                human_bytes(nv.free_bytes)
+            );
             Ok(0)
         }
         DriveCmd::Eject { path } => {
@@ -744,10 +890,17 @@ fn shell(cmd: ShellCmd) -> anyhow::Result<i32> {
         ShellCmd::Install { app } => {
             let app = app.unwrap_or_else(|| {
                 let exe = std::env::current_exe().unwrap_or_default();
-                exe.with_file_name(if cfg!(windows) { "fast-copy.exe" } else { "fast-copy" })
+                exe.with_file_name(if cfg!(windows) {
+                    "fast-copy.exe"
+                } else {
+                    "fast-copy"
+                })
             });
             if !app.exists() {
-                bail!("application introuvable : {} (utilisez --app)", app.display());
+                bail!(
+                    "application introuvable : {} (utilisez --app)",
+                    app.display()
+                );
             }
             shell::install(&app, &shell::system_lang())?;
             println!("✓ Menus clic droit installés pour {}.", app.display());
@@ -759,7 +912,14 @@ fn shell(cmd: ShellCmd) -> anyhow::Result<i32> {
             Ok(0)
         }
         ShellCmd::Status => {
-            println!("{}", if shell::is_installed() { "installé" } else { "non installé" });
+            println!(
+                "{}",
+                if shell::is_installed() {
+                    "installé"
+                } else {
+                    "non installé"
+                }
+            );
             Ok(0)
         }
     }
@@ -777,7 +937,17 @@ fn bench(src: &Path, dest_dir: &Path, compare: bool) -> anyhow::Result<i32> {
             spec.verify = verify;
             spec.on_conflict = OnConflict::Overwrite;
             let plan = fc_core::plan::build(&spec)?;
-            let r = job::execute(&plan, &Control::new(), &NullSink, &NonInteractive, job::ExecOptions { journal: false, force: true, ..Default::default() })?;
+            let r = job::execute(
+                &plan,
+                &Control::new(),
+                &NullSink,
+                &NonInteractive,
+                job::ExecOptions {
+                    journal: false,
+                    force: true,
+                    ..Default::default()
+                },
+            )?;
             println!(
                 "Fast Copy (vérification {:<8}) : {} en {:.2} s → {}/s  [profil {}]",
                 format!("{verify:?}").to_lowercase(),
@@ -792,11 +962,18 @@ fn bench(src: &Path, dest_dir: &Path, compare: bool) -> anyhow::Result<i32> {
             std::fs::create_dir_all(&out)?;
             let t = std::time::Instant::now();
             let n = std::fs::copy(src, out.join(src.file_name().unwrap()))?;
-            if let Ok(f) = std::fs::OpenOptions::new().write(true).open(out.join(src.file_name().unwrap())) {
+            if let Ok(f) = std::fs::OpenOptions::new()
+                .write(true)
+                .open(out.join(src.file_name().unwrap()))
+            {
                 let _ = f.sync_all();
             }
             let s = t.elapsed().as_secs_f64();
-            println!("Copie système (sans vérification) : {} en {s:.2} s → {}/s", human_bytes(n), human_bytes((n as f64 / s) as u64));
+            println!(
+                "Copie système (sans vérification) : {} en {s:.2} s → {}/s",
+                human_bytes(n),
+                human_bytes((n as f64 / s) as u64)
+            );
         }
         Ok(())
     })();

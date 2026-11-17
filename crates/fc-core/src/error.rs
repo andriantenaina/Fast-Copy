@@ -29,7 +29,11 @@ pub enum Error {
 
 impl Error {
     pub fn io(op: &'static str, path: impl Into<PathBuf>, source: io::Error) -> Self {
-        Error::Io { op, path: path.into(), source }
+        Error::Io {
+            op,
+            path: path.into(),
+            source,
+        }
     }
 
     /// True if the underlying OS error means "disk full".

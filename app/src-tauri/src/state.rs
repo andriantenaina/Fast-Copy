@@ -11,7 +11,9 @@ use std::time::{Duration, Instant};
 use fc_core::plan::{Issue, Plan, Severity};
 use fc_core::queue::{JobQueue, QueueEntry, QueueSink, QueueState};
 use fc_core::volume::{BusKind, FsKind, VolumeInfo};
-use fc_core::{ConflictDecision, ConflictInfo, DiskFullAction, Event, Interaction, Mode, OnConflict};
+use fc_core::{
+    ConflictDecision, ConflictInfo, DiskFullAction, Event, Interaction, Mode, OnConflict,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -102,7 +104,12 @@ impl From<&Plan> for PlanView {
     fn from(p: &Plan) -> Self {
         PlanView {
             id: p.id.clone(),
-            sources: p.spec.sources.iter().map(|s| s.display().to_string()).collect(),
+            sources: p
+                .spec
+                .sources
+                .iter()
+                .map(|s| s.display().to_string())
+                .collect(),
             dest: p.spec.dest.display().to_string(),
             mode: p.spec.mode,
             total_bytes: p.total_bytes,
@@ -126,7 +133,10 @@ impl From<&Plan> for PlanView {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Intent {
     #[serde(rename_all = "camelCase")]
-    Sources { sources: Vec<String>, mode: Option<Mode> },
+    Sources {
+        sources: Vec<String>,
+        mode: Option<Mode>,
+    },
     #[serde(rename_all = "camelCase")]
     Plan { plan: PlanView },
     #[serde(rename_all = "camelCase")]
@@ -139,9 +149,19 @@ pub enum Intent {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum PendingRequest {
     #[serde(rename_all = "camelCase")]
-    Conflict { request_id: u64, job_id: Option<String>, info: ConflictInfo },
+    Conflict {
+        request_id: u64,
+        job_id: Option<String>,
+        info: ConflictInfo,
+    },
     #[serde(rename_all = "camelCase")]
-    DiskFull { request_id: u64, job_id: Option<String>, path: String, needed: u64, available: u64 },
+    DiskFull {
+        request_id: u64,
+        job_id: Option<String>,
+        path: String,
+        needed: u64,
+        available: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -173,33 +193,60 @@ pub struct Requests {
 
 impl Requests {
     fn new(app: AppHandle) -> Self {
-        Requests { app, next: AtomicU64::new(1), waiting: Mutex::new(HashMap::new()), running_job: Mutex::new(None) }
+        Requests {
+            app,
+            next: AtomicU64::new(1),
+            waiting: Mutex::new(HashMap::new()),
+            running_job: Mutex::new(None),
+        }
     }
 
-    fn ask(&self, make: impl FnOnce(u64, Option<String>) -> PendingRequest, event: &str) -> Option<Answer> {
+    fn ask(
+        &self,
+        make: impl FnOnce(u64, Option<String>) -> PendingRequest,
+        event: &str,
+    ) -> Option<Answer> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let job = self.running_job.lock().unwrap().clone();
         let req = make(id, job);
         let (tx, rx) = channel();
-        self.waiting.lock().unwrap().insert(id, Waiting { req: req.clone(), tx });
+        self.waiting.lock().unwrap().insert(
+            id,
+            Waiting {
+                req: req.clone(),
+                tx,
+            },
+        );
         crate::show_main_window(&self.app);
         let _ = self.app.emit(event, &req);
         rx.recv().ok()
     }
 
     pub fn pending(&self) -> Vec<PendingRequest> {
-        let mut v: Vec<(u64, PendingRequest)> = self.waiting.lock().unwrap().iter().map(|(k, w)| (*k, w.req.clone())).collect();
+        let mut v: Vec<(u64, PendingRequest)> = self
+            .waiting
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, w)| (*k, w.req.clone()))
+            .collect();
         v.sort_by_key(|(k, _)| *k);
         v.into_iter().map(|(_, r)| r).collect()
     }
 
     pub fn resolve_conflict(&self, id: u64, d: ConflictDecision) -> bool {
         let mut w = self.waiting.lock().unwrap();
-        let Some(entry) = w.remove(&id) else { return false };
+        let Some(entry) = w.remove(&id) else {
+            return false;
+        };
         let _ = entry.tx.send(Answer::Conflict(d));
         if d.apply_to_all {
             // Workers may have asked concurrently: give them the same answer.
-            let others: Vec<u64> = w.iter().filter(|(_, x)| matches!(x.req, PendingRequest::Conflict { .. })).map(|(k, _)| *k).collect();
+            let others: Vec<u64> = w
+                .iter()
+                .filter(|(_, x)| matches!(x.req, PendingRequest::Conflict { .. }))
+                .map(|(k, _)| *k)
+                .collect();
             for k in others {
                 if let Some(x) = w.remove(&k) {
                     let _ = x.tx.send(Answer::Conflict(d));
@@ -225,7 +272,10 @@ impl Requests {
         let drained: Vec<(u64, Waiting)> = self.waiting.lock().unwrap().drain().collect();
         for (k, w) in drained {
             let a = match w.req {
-                PendingRequest::Conflict { .. } => Answer::Conflict(ConflictDecision { action: OnConflict::Skip, apply_to_all: true }),
+                PendingRequest::Conflict { .. } => Answer::Conflict(ConflictDecision {
+                    action: OnConflict::Skip,
+                    apply_to_all: true,
+                }),
                 PendingRequest::DiskFull { .. } => Answer::DiskFull(DiskFullAction::Abort),
             };
             let _ = w.tx.send(a);
@@ -239,15 +289,34 @@ pub struct GuiInteraction(pub Arc<Requests>);
 impl Interaction for GuiInteraction {
     fn resolve_conflict(&self, info: &ConflictInfo) -> ConflictDecision {
         let info = info.clone();
-        match self.0.ask(|request_id, job_id| PendingRequest::Conflict { request_id, job_id, info }, "conflict-request") {
+        match self.0.ask(
+            |request_id, job_id| PendingRequest::Conflict {
+                request_id,
+                job_id,
+                info,
+            },
+            "conflict-request",
+        ) {
             Some(Answer::Conflict(d)) if d.action != OnConflict::Ask => d,
-            _ => ConflictDecision { action: OnConflict::Skip, apply_to_all: false },
+            _ => ConflictDecision {
+                action: OnConflict::Skip,
+                apply_to_all: false,
+            },
         }
     }
 
     fn disk_full(&self, path: &str, needed: u64, available: u64) -> DiskFullAction {
         let path = path.to_string();
-        match self.0.ask(|request_id, job_id| PendingRequest::DiskFull { request_id, job_id, path, needed, available }, "disk-full-request") {
+        match self.0.ask(
+            |request_id, job_id| PendingRequest::DiskFull {
+                request_id,
+                job_id,
+                path,
+                needed,
+                available,
+            },
+            "disk-full-request",
+        ) {
             Some(Answer::DiskFull(a)) => a,
             _ => DiskFullAction::Abort,
         }
@@ -298,7 +367,12 @@ impl TauriSink {
         if t.done == 0 && t.skipped == 0 {
             return;
         }
-        let batch = FileBatch { job_id: job_id.to_string(), done: t.done, skipped: t.skipped, recent: std::mem::take(&mut t.recent) };
+        let batch = FileBatch {
+            job_id: job_id.to_string(),
+            done: t.done,
+            skipped: t.skipped,
+            recent: std::mem::take(&mut t.recent),
+        };
         t.done = 0;
         t.skipped = 0;
         t.last_flush = Some(Instant::now());
@@ -306,7 +380,9 @@ impl TauriSink {
     }
 
     fn emit_event(&self, job_id: &str, e: &Event) {
-        let _ = self.app.emit("job-event", JobEventPayload { job_id, event: e });
+        let _ = self
+            .app
+            .emit("job-event", JobEventPayload { job_id, event: e });
     }
 }
 
@@ -318,19 +394,31 @@ impl QueueSink for TauriSink {
             Event::Progress(s) => {
                 let now = Instant::now();
                 let phase_changed = t.last_phase != Some(s.phase);
-                if !phase_changed && t.last_progress.is_some_and(|l| now.duration_since(l) < PROGRESS_MIN) {
+                if !phase_changed
+                    && t.last_progress
+                        .is_some_and(|l| now.duration_since(l) < PROGRESS_MIN)
+                {
                     return;
                 }
                 t.last_progress = Some(now);
                 t.last_phase = Some(s.phase);
-                if t.last_flush.map_or(true, |l| now.duration_since(l) >= FILES_FLUSH) {
+                if t.last_flush
+                    .map_or(true, |l| now.duration_since(l) >= FILES_FLUSH)
+                {
                     self.flush_files(job_id, t);
                 }
                 drop(map);
                 self.emit_event(job_id, e);
             }
             Event::FileDone { path, .. } | Event::FileSkipped { path, .. } => {
-                if !self.app.state::<AppState>().settings.lock().unwrap().file_events {
+                if !self
+                    .app
+                    .state::<AppState>()
+                    .settings
+                    .lock()
+                    .unwrap()
+                    .file_events
+                {
                     return;
                 }
                 if matches!(e, Event::FileDone { .. }) {
@@ -382,7 +470,11 @@ pub struct AppState {
 impl AppState {
     pub fn new(app: &AppHandle) -> AppState {
         let requests = Arc::new(Requests::new(app.clone()));
-        let sink = Arc::new(TauriSink { app: app.clone(), requests: requests.clone(), throttle: Mutex::new(HashMap::new()) });
+        let sink = Arc::new(TauriSink {
+            app: app.clone(),
+            requests: requests.clone(),
+            throttle: Mutex::new(HashMap::new()),
+        });
         let queue = JobQueue::new(sink, Arc::new(GuiInteraction(requests.clone())));
         AppState {
             queue,
@@ -400,7 +492,11 @@ impl AppState {
 
     /// Jobs not finished yet (pending, running, paused).
     pub fn active_jobs(&self) -> usize {
-        self.queue.list().iter().filter(|e| !matches!(e.state, QueueState::Finished(_))).count()
+        self.queue
+            .list()
+            .iter()
+            .filter(|e| !matches!(e.state, QueueState::Finished(_)))
+            .count()
     }
 
     pub fn push_intent(&self, app: &AppHandle, i: Intent) {
@@ -419,7 +515,12 @@ impl AppState {
         view
     }
 
-    pub fn spec_with_defaults(&self, sources: Vec<PathBuf>, dest: PathBuf, mode: Mode) -> fc_core::JobSpec {
+    pub fn spec_with_defaults(
+        &self,
+        sources: Vec<PathBuf>,
+        dest: PathBuf,
+        mode: Mode,
+    ) -> fc_core::JobSpec {
         let s = self.settings.lock().unwrap();
         let mut spec = fc_core::JobSpec::new(sources, dest);
         spec.mode = mode;

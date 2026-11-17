@@ -48,7 +48,13 @@ pub fn parse(argv: &[String], cwd: Option<&Path>) -> Option<Request> {
             };
             (verb, args.iter().skip(i + 2).copied().collect())
         }
-        None => (Verb::SendTo, args.iter().copied().filter(|a| !a.starts_with("--") && !a.starts_with("-psn_")).collect()),
+        None => (
+            Verb::SendTo,
+            args.iter()
+                .copied()
+                .filter(|a| !a.starts_with("--") && !a.starts_with("-psn_"))
+                .collect(),
+        ),
     };
     let paths = expand(rest.iter().map(|s| s.as_str()), cwd);
     if paths.is_empty() && verb != Verb::Paste {
@@ -99,7 +105,9 @@ fn absolute(p: &Path, cwd: Option<&Path>) -> PathBuf {
     }
     match cwd {
         Some(c) => c.join(p),
-        None => std::env::current_dir().map(|c| c.join(p)).unwrap_or_else(|_| p.to_path_buf()),
+        None => std::env::current_dir()
+            .map(|c| c.join(p))
+            .unwrap_or_else(|_| p.to_path_buf()),
     }
 }
 
@@ -167,26 +175,59 @@ pub fn dispatch(app: &AppHandle, req: Request) {
     let state = app.state::<AppState>();
     match req.verb {
         Verb::Copy | Verb::Move => {
-            let mode = if req.verb == Verb::Move { Mode::Move } else { Mode::Copy };
-            if let Err(e) = fc_core::shell::set_app_clipboard(mode, req.paths.clone()) {
-                state.push_intent(app, Intent::Error { message: e.to_string() });
+            let mode = if req.verb == Verb::Move {
+                Mode::Move
             } else {
-                let (title, body) = crate::texts::items_ready(&state.lang(), req.paths.len(), mode == Mode::Move);
+                Mode::Copy
+            };
+            if let Err(e) = fc_core::shell::set_app_clipboard(mode, req.paths.clone()) {
+                state.push_intent(
+                    app,
+                    Intent::Error {
+                        message: e.to_string(),
+                    },
+                );
+            } else {
+                let (title, body) =
+                    crate::texts::items_ready(&state.lang(), req.paths.len(), mode == Mode::Move);
                 crate::notify(app, &title, &body);
             }
-            state.push_intent(app, Intent::Sources { sources: strings(&req.paths), mode: Some(mode) });
+            state.push_intent(
+                app,
+                Intent::Sources {
+                    sources: strings(&req.paths),
+                    mode: Some(mode),
+                },
+            );
             crate::show_main_window(app);
         }
         Verb::SendTo => {
-            state.push_intent(app, Intent::Sources { sources: strings(&req.paths), mode: None });
+            state.push_intent(
+                app,
+                Intent::Sources {
+                    sources: strings(&req.paths),
+                    mode: None,
+                },
+            );
             crate::show_main_window(app);
         }
         Verb::Paste => {
             crate::show_main_window(app);
-            let Some(dest) = req.paths.first().cloned() else { return };
+            let Some(dest) = req.paths.first().cloned() else {
+                return;
+            };
             let Some((sources, mode)) = fc_core::shell::paste_source() else {
-                let msg = if state.lang() == "fr" { "Rien à coller : utilisez d'abord « Copier avec Fast Copy »." } else { "Nothing to paste: use “Copy with Fast Copy” first." };
-                state.push_intent(app, Intent::Error { message: msg.into() });
+                let msg = if state.lang() == "fr" {
+                    "Rien à coller : utilisez d'abord « Copier avec Fast Copy »."
+                } else {
+                    "Nothing to paste: use “Copy with Fast Copy” first."
+                };
+                state.push_intent(
+                    app,
+                    Intent::Error {
+                        message: msg.into(),
+                    },
+                );
                 return;
             };
             let spec = state.spec_with_defaults(sources, dest, mode);
@@ -205,7 +246,12 @@ pub fn dispatch(app: &AppHandle, req: Request) {
                         let view = state.keep_plan(plan);
                         state.push_intent(&app, Intent::Plan { plan: view });
                     }
-                    Err(e) => state.push_intent(&app, Intent::Error { message: e.to_string() }),
+                    Err(e) => state.push_intent(
+                        &app,
+                        Intent::Error {
+                            message: e.to_string(),
+                        },
+                    ),
                 }
             });
         }

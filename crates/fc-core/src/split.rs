@@ -51,7 +51,9 @@ impl SplitManifest {
 
     pub fn load(path: &Path) -> Result<SplitManifest> {
         let data = std::fs::read(path).ctx("lecture du manifeste", path)?;
-        serde_json::from_slice(&data).map_err(|e| crate::error::Error::Other(format!("manifeste invalide « {} » : {e}", path.display())))
+        serde_json::from_slice(&data).map_err(|e| {
+            crate::error::Error::Other(format!("manifeste invalide « {} » : {e}", path.display()))
+        })
     }
 
     /// Other files written next to the chunks.
@@ -72,12 +74,20 @@ impl SplitManifest {
         written.push(mpath);
 
         let shapath = dir.join(format!("{}.sha256", self.original_name));
-        write_durable(&shapath, format!("{} *{}\n", self.sha256, self.original_name).as_bytes())?;
+        write_durable(
+            &shapath,
+            format!("{} *{}\n", self.sha256, self.original_name).as_bytes(),
+        )?;
         written.push(shapath);
 
         // Windows: explicit part list (wildcard order is not guaranteed on FAT).
         let name = &self.original_name;
-        let parts_cmd = self.parts.iter().map(|p| format!("\"{}\"", p.name)).collect::<Vec<_>>().join(" + ");
+        let parts_cmd = self
+            .parts
+            .iter()
+            .map(|p| format!("\"{}\"", p.name))
+            .collect::<Vec<_>>()
+            .join(" + ");
         let cmd = format!(
             "@echo off\r\n\
              rem Recolle « {name} » a partir de ses morceaux (genere par Fast Copy).\r\n\
@@ -101,7 +111,12 @@ impl SplitManifest {
         write_durable(&cpath, cmd.as_bytes())?;
         written.push(cpath);
 
-        let parts_sh = self.parts.iter().map(|p| format!("'{}'", p.name.replace('\'', "'\\''"))).collect::<Vec<_>>().join(" ");
+        let parts_sh = self
+            .parts
+            .iter()
+            .map(|p| format!("'{}'", p.name.replace('\'', "'\\''")))
+            .collect::<Vec<_>>()
+            .join(" ");
         let qname = name.replace('\'', "'\\''");
         let sh = format!(
             "#!/bin/sh\n\

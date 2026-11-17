@@ -23,17 +23,31 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { lang: "auto".into(), verify: VerifyMode::Full, on_conflict: OnConflict::Ask, skip_junk: true, file_events: true, notify: true, auto_shell: true }
+        Settings {
+            lang: "auto".into(),
+            verify: VerifyMode::Full,
+            on_conflict: OnConflict::Ask,
+            skip_junk: true,
+            file_events: true,
+            notify: true,
+            auto_shell: true,
+        }
     }
 }
 
 impl Settings {
     pub fn path() -> PathBuf {
-        dirs::config_dir().unwrap_or_else(std::env::temp_dir).join("FastCopy").join("settings.json")
+        dirs::config_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("FastCopy")
+            .join("settings.json")
     }
 
     pub fn load() -> Settings {
-        std::fs::read(Self::path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+        std::fs::read(Self::path())
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -42,7 +56,11 @@ impl Settings {
             std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
         }
         let tmp = p.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        std::fs::write(
+            &tmp,
+            serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, &p).map_err(|e| e.to_string())
     }
 

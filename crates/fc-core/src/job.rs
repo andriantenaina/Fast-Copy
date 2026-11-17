@@ -55,7 +55,11 @@ enum Decision {
 
 enum Outcome {
     /// Committed; `handle` still needs the batch device flush (unbuffered small file).
-    Done { bytes: u64, handle: Option<File>, delete: Vec<PathBuf> },
+    Done {
+        bytes: u64,
+        handle: Option<File>,
+        delete: Vec<PathBuf>,
+    },
     /// Written through the cache; verified and committed when the batch is flushed.
     Deferred(Box<Deferred>),
     Skipped(String),
@@ -94,10 +98,22 @@ struct Run<'a> {
 }
 
 /// Execute a plan.
-pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn Interaction, opts: ExecOptions) -> Result<Report> {
+pub fn execute(
+    plan: &Plan,
+    control: &Control,
+    sink: &dyn EventSink,
+    ui: &dyn Interaction,
+    opts: ExecOptions,
+) -> Result<Report> {
     let blocking = plan.blocking_issues();
     if !opts.force && !blocking.is_empty() {
-        return Err(Error::Blocked(blocking.iter().map(|i| i.message.clone()).collect::<Vec<_>>().join(" ; ")));
+        return Err(Error::Blocked(
+            blocking
+                .iter()
+                .map(|i| i.message.clone())
+                .collect::<Vec<_>>()
+                .join(" ; "),
+        ));
     }
     let stats = opts.stats.clone().unwrap_or_default();
     let warnings = Mutex::new(Vec::new());
@@ -105,7 +121,11 @@ pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn In
     let resume = opts.resume.unwrap_or_default();
 
     let journal = if opts.journal {
-        let path = opts.journal_dir.as_ref().map(|d| d.join(format!("{}.jsonl", plan.id))).unwrap_or_else(|| journal_path(&plan.id));
+        let path = opts
+            .journal_dir
+            .as_ref()
+            .map(|d| d.join(format!("{}.jsonl", plan.id)))
+            .unwrap_or_else(|| journal_path(&plan.id));
         Some(if resuming && path.exists() {
             Journal::reopen(&path)?
         } else {
@@ -119,12 +139,27 @@ pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn In
     };
 
     // Moves must never delete a source that was not verified on the destination.
-    let verify = if plan.spec.mode == Mode::Move && plan.spec.verify == VerifyMode::Fast { VerifyMode::Full } else { plan.spec.verify };
-    let split_chunk = plan.spec.split_chunk_override.filter(|c| *c >= 4096 && c % 4096 == 0).unwrap_or(SPLIT_CHUNK);
+    let verify = if plan.spec.mode == Mode::Move && plan.spec.verify == VerifyMode::Fast {
+        VerifyMode::Full
+    } else {
+        plan.spec.verify
+    };
+    let split_chunk = plan
+        .spec
+        .split_chunk_override
+        .filter(|c| *c >= 4096 && c % 4096 == 0)
+        .unwrap_or(SPLIT_CHUNK);
 
     let run = Run {
         plan,
-        ctx: Ctx { profile: &plan.profile, control, stats: &stats, verify, dst_fs: &plan.dst_volume.fs, warnings: &warnings },
+        ctx: Ctx {
+            profile: &plan.profile,
+            control,
+            stats: &stats,
+            verify,
+            dst_fs: &plan.dst_volume.fs,
+            warnings: &warnings,
+        },
         sink,
         ui,
         journal,
@@ -141,7 +176,11 @@ pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn In
 
     stats.bytes_total.store(plan.total_bytes, Ordering::Relaxed);
     stats.files_total.store(plan.total_files, Ordering::Relaxed);
-    sink.event(Event::Planned { files: plan.total_files, bytes: plan.total_bytes, dirs: plan.total_dirs });
+    sink.event(Event::Planned {
+        files: plan.total_files,
+        bytes: plan.total_bytes,
+        dirs: plan.total_dirs,
+    });
     stats.set_phase(Phase::Copying);
 
     let finished = AtomicBool::new(false);
@@ -159,7 +198,10 @@ pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn In
     let cancelled = matches!(result, Err(Error::Cancelled));
     if let Err(e) = &result {
         if !cancelled {
-            run.errors.lock().unwrap().push(FileError { path: String::new(), error: e.to_string() });
+            run.errors.lock().unwrap().push(FileError {
+                path: String::new(),
+                error: e.to_string(),
+            });
         }
     }
     stats.set_phase(Phase::Done);
@@ -183,11 +225,18 @@ pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn In
         files_failed: stats.files_failed.load(Ordering::Relaxed),
         bytes_copied: bytes,
         elapsed_ms: elapsed.as_millis() as u64,
-        avg_speed: if elapsed.as_secs_f64() > 0.0 { bytes as f64 / elapsed.as_secs_f64() } else { 0.0 },
+        avg_speed: if elapsed.as_secs_f64() > 0.0 {
+            bytes as f64 / elapsed.as_secs_f64()
+        } else {
+            0.0
+        },
         errors,
         renamed: plan.renamed.clone(),
         warnings: std::mem::take(&mut *warnings.lock().unwrap()),
-        locked: std::mem::take(&mut *run.locked.lock().unwrap()).into_iter().map(|(_, s, _)| s).collect(),
+        locked: std::mem::take(&mut *run.locked.lock().unwrap())
+            .into_iter()
+            .map(|(_, s, _)| s)
+            .collect(),
     };
 
     if let Some(j) = &run.journal {
@@ -208,8 +257,18 @@ pub fn execute(plan: &Plan, control: &Control, sink: &dyn EventSink, ui: &dyn In
 }
 
 /// Resume an interrupted job from its journal (`id` or path to the `.jsonl`).
-pub fn resume(id_or_path: &str, control: &Control, sink: &dyn EventSink, ui: &dyn Interaction, mut opts: ExecOptions) -> Result<Report> {
-    let path = if Path::new(id_or_path).exists() { PathBuf::from(id_or_path) } else { journal_path(id_or_path) };
+pub fn resume(
+    id_or_path: &str,
+    control: &Control,
+    sink: &dyn EventSink,
+    ui: &dyn Interaction,
+    mut opts: ExecOptions,
+) -> Result<Report> {
+    let path = if Path::new(id_or_path).exists() {
+        PathBuf::from(id_or_path)
+    } else {
+        journal_path(id_or_path)
+    };
     let (plan, state) = Journal::load(&path)?;
     opts.resume = Some(state);
     opts.force = true; // the plan was accepted when the job started
@@ -219,7 +278,13 @@ pub fn resume(id_or_path: &str, control: &Control, sink: &dyn EventSink, ui: &dy
     execute(&plan, control, sink, ui, opts)
 }
 
-fn progress_loop(stats: &Stats, control: &Control, sink: &dyn EventSink, finished: &AtomicBool, every: Duration) {
+fn progress_loop(
+    stats: &Stats,
+    control: &Control,
+    sink: &dyn EventSink,
+    finished: &AtomicBool,
+    every: Duration,
+) {
     let mut last_bytes = stats.bytes_done.load(Ordering::Relaxed);
     let mut last_t = Instant::now();
     let mut speed = 0f64;
@@ -231,7 +296,11 @@ fn progress_loop(stats: &Stats, control: &Control, sink: &dyn EventSink, finishe
         let dt = now.duration_since(last_t).as_secs_f64();
         if dt > 0.0 && !control.is_paused() {
             let inst = bytes.saturating_sub(last_bytes) as f64 / dt;
-            speed = if speed == 0.0 { inst } else { speed * 0.8 + inst * 0.2 };
+            speed = if speed == 0.0 {
+                inst
+            } else {
+                speed * 0.8 + inst * 0.2
+            };
         }
         last_bytes = bytes;
         last_t = now;
@@ -249,7 +318,11 @@ fn progress_loop(stats: &Stats, control: &Control, sink: &dyn EventSink, finishe
             current: stats.current.lock().unwrap().clone(),
             speed,
             elapsed_ms: stats.start.elapsed().as_millis() as u64,
-            eta_secs: if speed > 1.0 { Some(((total - done_b) as f64 / speed) as u64) } else { None },
+            eta_secs: if speed > 1.0 {
+                Some(((total - done_b) as f64 / speed) as u64)
+            } else {
+                None
+            },
             paused: control.is_paused(),
         };
         sink.event(Event::Progress(snap));
@@ -271,13 +344,30 @@ pub fn copy_one(src: &Path, dst: &Path, verify: VerifyMode) -> Result<u64> {
     let control = Control::new();
     let stats = Stats::default();
     let warnings = Mutex::new(Vec::new());
-    let ctx = Ctx { profile: &profile, control: &control, stats: &stats, verify, dst_fs: &dst_vol.fs, warnings: &warnings };
+    let ctx = Ctx {
+        profile: &profile,
+        control: &control,
+        stats: &stats,
+        verify,
+        dst_fs: &dst_vol.fs,
+        warnings: &warnings,
+    };
     if let Some(p) = dst.parent() {
         std::fs::create_dir_all(sys::long_path(p)).ctx("création du dossier", p)?;
     }
     let tmp = crate::util::temp_path(dst);
     let r = (|| -> Result<u64> {
-        let w = engine::write_file(&ctx, src, dst, None, std::fs::metadata(sys::long_path(src)).map(|m| m.len()).unwrap_or(0), false, &mut |_| Ok(()))?;
+        let w = engine::write_file(
+            &ctx,
+            src,
+            dst,
+            None,
+            std::fs::metadata(sys::long_path(src))
+                .map(|m| m.len())
+                .unwrap_or(0),
+            false,
+            &mut |_| Ok(()),
+        )?;
         sys::full_sync(&w.file).ctx("vidage", &w.tmp)?;
         engine::verify_written(&ctx, &w, src)?;
         engine::apply_metadata(&ctx, &w.file, &w.tmp, src, &w.meta, &w.streams);
@@ -298,7 +388,13 @@ impl Run<'_> {
         if pending.is_empty() {
             return;
         }
-        let pairs: Vec<crate::vss::VssPair> = pending.iter().map(|(_, s, d)| crate::vss::VssPair { src: s.clone(), dst: d.clone() }).collect();
+        let pairs: Vec<crate::vss::VssPair> = pending
+            .iter()
+            .map(|(_, s, d)| crate::vss::VssPair {
+                src: s.clone(),
+                dst: d.clone(),
+            })
+            .collect();
         match crate::vss::copy_locked(&pairs, self.ctx.verify) {
             Ok(results) => {
                 let mut still = Vec::new();
@@ -315,7 +411,11 @@ impl Run<'_> {
                             self.ctx.warn(format!("« {} » copié via VSS mais non supprimé (fichier en cours d'utilisation)", it.rel));
                         }
                     } else {
-                        self.ctx.warn(format!("VSS : « {} » : {}", it.rel, r.error.unwrap_or_default()));
+                        self.ctx.warn(format!(
+                            "VSS : « {} » : {}",
+                            it.rel,
+                            r.error.unwrap_or_default()
+                        ));
                         still.push((i, s, d));
                     }
                 }
@@ -336,7 +436,8 @@ impl Run<'_> {
 
     fn run_all(&self) -> Result<()> {
         let plan = self.plan;
-        std::fs::create_dir_all(sys::long_path(&plan.spec.dest)).ctx("création de la destination", &plan.spec.dest)?;
+        std::fs::create_dir_all(sys::long_path(&plan.spec.dest))
+            .ctx("création de la destination", &plan.spec.dest)?;
 
         let mut skip_set = std::collections::HashSet::new();
         if plan.same_volume {
@@ -379,7 +480,9 @@ impl Run<'_> {
             std::thread::scope(|s| {
                 let h = s.spawn(|| self.large_lane(&large));
                 let a = self.small_pool(&small);
-                let b = h.join().unwrap_or(Err(Error::Other("voie gros fichiers interrompue".into())));
+                let b = h
+                    .join()
+                    .unwrap_or(Err(Error::Other("voie gros fichiers interrompue".into())));
                 a.and(b)
             })?;
         } else {
@@ -405,11 +508,24 @@ impl Run<'_> {
     fn fast_move_trees(&self, skip: &mut std::collections::HashSet<usize>) {
         let plan = self.plan;
         for src in &plan.spec.sources {
-            let Some(base) = src.file_name().map(|n| n.to_string_lossy().into_owned()) else { continue };
-            let Some((top_i, top)) = plan.items.iter().enumerate().find(|(_, it)| it.rel == base && it.src == *src) else { continue };
+            let Some(base) = src.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                continue;
+            };
+            let Some((top_i, top)) = plan
+                .items
+                .iter()
+                .enumerate()
+                .find(|(_, it)| it.rel == base && it.src == *src)
+            else {
+                continue;
+            };
             // Only when no descendant needed renaming.
             let prefix = format!("{base}/");
-            if plan.renamed.iter().any(|(from, _)| from == &base || from.starts_with(&prefix)) {
+            if plan
+                .renamed
+                .iter()
+                .any(|(from, _)| from == &base || from.starts_with(&prefix))
+            {
                 continue;
             }
             let target = plan.dst_path(top);
@@ -521,7 +637,10 @@ impl Run<'_> {
                     self.files_copied.fetch_add(1, Ordering::Relaxed);
                     self.bytes_copied.fetch_add(d.w.size, Ordering::Relaxed);
                     if self.file_events {
-                        self.sink.event(Event::FileDone { path: it.rel.clone(), bytes: d.w.size });
+                        self.sink.event(Event::FileDone {
+                            path: it.rel.clone(),
+                            bytes: d.w.size,
+                        });
                     }
                     b.idxs.push(d.i);
                     b.deletes.extend(self.deletes_for(it));
@@ -535,7 +654,8 @@ impl Run<'_> {
                     // Retry this file on the synchronous path (fresh write, immediate verify).
                     engine::discard_tmp(&d.w.tmp);
                     drop(d.w);
-                    self.ctx.warn(format!("{e} — nouvelle copie de « {} »", it.rel));
+                    self.ctx
+                        .warn(format!("{e} — nouvelle copie de « {} »", it.rel));
                     let mut single = Batch::default();
                     match self.run_item(d.i, &mut single, false) {
                         Ok(_) => {
@@ -564,7 +684,8 @@ impl Run<'_> {
             let lp = sys::long_path(&p);
             let _ = sys::clear_readonly(&lp);
             if let Err(e) = std::fs::remove_file(&lp) {
-                self.ctx.warn(format!("source non supprimée « {} » : {e}", p.display()));
+                self.ctx
+                    .warn(format!("source non supprimée « {} » : {e}", p.display()));
             }
         }
         b.idxs.clear();
@@ -582,12 +703,19 @@ impl Run<'_> {
         let mut attempts = 0;
         loop {
             match self.process(i, it, defer && attempts == 0) {
-                Ok(Outcome::Done { bytes, handle, delete }) => {
+                Ok(Outcome::Done {
+                    bytes,
+                    handle,
+                    delete,
+                }) => {
                     self.ctx.stats.files_done.fetch_add(1, Ordering::Relaxed);
                     self.files_copied.fetch_add(1, Ordering::Relaxed);
                     self.bytes_copied.fetch_add(bytes, Ordering::Relaxed);
                     if self.file_events {
-                        self.sink.event(Event::FileDone { path: it.rel.clone(), bytes });
+                        self.sink.event(Event::FileDone {
+                            path: it.rel.clone(),
+                            bytes,
+                        });
                     }
                     batch.idxs.push(i);
                     batch.deletes.extend(delete);
@@ -606,14 +734,18 @@ impl Run<'_> {
                     self.ctx.stats.add_verified(it.size);
                     self.journal(Record::Skip { i });
                     if self.file_events {
-                        self.sink.event(Event::FileSkipped { path: it.rel.clone(), reason });
+                        self.sink.event(Event::FileSkipped {
+                            path: it.rel.clone(),
+                            reason,
+                        });
                     }
                     return Ok(false);
                 }
                 Err(Error::Cancelled) => return Err(Error::Cancelled),
                 Err(e @ (Error::VerifyMismatch(_) | Error::SourceChanged(_))) if attempts < 2 => {
                     attempts += 1;
-                    self.ctx.warn(format!("{e} — nouvelle tentative ({attempts}/2)"));
+                    self.ctx
+                        .warn(format!("{e} — nouvelle tentative ({attempts}/2)"));
                 }
                 Err(e) if e.is_disk_full() => {
                     let avail = crate::volume::detect(&self.plan.spec.dest).free_bytes;
@@ -632,7 +764,11 @@ impl Run<'_> {
                 }
                 Err(e) => {
                     if e.is_locked() {
-                        self.locked.lock().unwrap().push((i, it.src.clone(), self.plan.dst_path(it)));
+                        self.locked.lock().unwrap().push((
+                            i,
+                            it.src.clone(),
+                            self.plan.dst_path(it),
+                        ));
                     }
                     self.fail(i, it, &e);
                     return Ok(false);
@@ -646,9 +782,18 @@ impl Run<'_> {
             self.ctx.stats.files_failed.fetch_add(1, Ordering::Relaxed);
         }
         let msg = e.to_string();
-        self.journal(Record::Failed { i, error: msg.clone() });
-        self.errors.lock().unwrap().push(FileError { path: it.rel.clone(), error: msg.clone() });
-        self.sink.event(Event::FileFailed { path: it.rel.clone(), error: msg });
+        self.journal(Record::Failed {
+            i,
+            error: msg.clone(),
+        });
+        self.errors.lock().unwrap().push(FileError {
+            path: it.rel.clone(),
+            error: msg.clone(),
+        });
+        self.sink.event(Event::FileFailed {
+            path: it.rel.clone(),
+            error: msg,
+        });
     }
 
     fn deletes_for(&self, it: &Item) -> Vec<PathBuf> {
@@ -661,7 +806,12 @@ impl Run<'_> {
                 v.push(it.src.clone());
                 if let Ok(m) = SplitManifest::load(&it.src) {
                     let dir = it.src.parent().unwrap_or(Path::new("")).to_path_buf();
-                    v.extend(m.companion_files().into_iter().map(|c| dir.join(c)).filter(|p| p.exists()));
+                    v.extend(
+                        m.companion_files()
+                            .into_iter()
+                            .map(|c| dir.join(c))
+                            .filter(|p| p.exists()),
+                    );
                 }
                 v
             }
@@ -674,7 +824,9 @@ impl Run<'_> {
         let final0 = plan.dst_path(it);
         // Destination used to detect a conflict (split sets are identified by their manifest).
         let probe = if it.kind == ItemKind::Split {
-            final0.with_file_name(SplitManifest::manifest_name(&final0.file_name().unwrap_or_default().to_string_lossy()))
+            final0.with_file_name(SplitManifest::manifest_name(
+                &final0.file_name().unwrap_or_default().to_string_lossy(),
+            ))
         } else {
             final0.clone()
         };
@@ -682,7 +834,11 @@ impl Run<'_> {
             Ok(dm) => match self.decide(i, it, &dm, &final0)? {
                 Decision::Skip => return Ok(Outcome::Skipped("existe déjà".into())),
                 Decision::AlreadyDone => {
-                    return Ok(Outcome::Done { bytes: it.size, handle: None, delete: self.deletes_for(it) });
+                    return Ok(Outcome::Done {
+                        bytes: it.size,
+                        handle: None,
+                        delete: self.deletes_for(it),
+                    });
                 }
                 Decision::Proceed { replace, path } => (replace, path),
             },
@@ -694,13 +850,21 @@ impl Run<'_> {
             ItemKind::Symlink => self.copy_symlink(it, &final_path, replace),
             ItemKind::Split => {
                 engine::write_split(&self.ctx, &it.src, &final_path, self.split_chunk)?;
-                Ok(Outcome::Done { bytes: it.size, handle: None, delete: self.deletes_for(it) })
+                Ok(Outcome::Done {
+                    bytes: it.size,
+                    handle: None,
+                    delete: self.deletes_for(it),
+                })
             }
             ItemKind::Join => {
                 let w = engine::write_join(&self.ctx, &it.src, &it.parts, &final_path)?;
                 self.journal(Record::Intent { i });
                 engine::commit(&w.tmp, &final_path, replace)?;
-                Ok(Outcome::Done { bytes: w.size, handle: None, delete: self.deletes_for(it) })
+                Ok(Outcome::Done {
+                    bytes: w.size,
+                    handle: None,
+                    delete: self.deletes_for(it),
+                })
             }
             ItemKind::File if plan.same_volume => {
                 let lf = sys::long_path(&final_path);
@@ -713,13 +877,24 @@ impl Run<'_> {
                 }
                 self.ctx.stats.add_done(it.size);
                 self.ctx.stats.add_verified(it.size);
-                Ok(Outcome::Done { bytes: it.size, handle: None, delete: vec![] })
+                Ok(Outcome::Done {
+                    bytes: it.size,
+                    handle: None,
+                    delete: vec![],
+                })
             }
             ItemKind::File => self.copy_file(i, it, &final_path, replace, defer),
         }
     }
 
-    fn copy_file(&self, i: usize, it: &Item, final_path: &Path, replace: bool, defer: bool) -> Result<Outcome> {
+    fn copy_file(
+        &self,
+        i: usize,
+        it: &Item,
+        final_path: &Path,
+        replace: bool,
+        defer: bool,
+    ) -> Result<Outcome> {
         let ctx = &self.ctx;
         let tmp = crate::util::temp_path(final_path);
 
@@ -730,16 +905,31 @@ impl Run<'_> {
             && it.size > 0
             && engine::try_clone(&it.src, &tmp)
         {
-            let meta = std::fs::metadata(sys::long_path(&it.src)).ctx("lecture des métadonnées", &it.src)?;
-            if let Ok(f) = std::fs::OpenOptions::new().write(true).open(sys::long_path(&tmp)) {
-                engine::apply_metadata(ctx, &f, &tmp, &it.src, &meta, &sys::list_streams(&sys::long_path(&it.src)));
+            let meta = std::fs::metadata(sys::long_path(&it.src))
+                .ctx("lecture des métadonnées", &it.src)?;
+            if let Ok(f) = std::fs::OpenOptions::new()
+                .write(true)
+                .open(sys::long_path(&tmp))
+            {
+                engine::apply_metadata(
+                    ctx,
+                    &f,
+                    &tmp,
+                    &it.src,
+                    &meta,
+                    &sys::list_streams(&sys::long_path(&it.src)),
+                );
             }
             self.journal(Record::Intent { i });
             engine::commit(&tmp, final_path, replace)?;
             engine::apply_final_attributes(final_path, &meta, false);
             ctx.stats.add_done(it.size);
             ctx.stats.add_verified(it.size);
-            return Ok(Outcome::Done { bytes: it.size, handle: None, delete: self.deletes_for(it) });
+            return Ok(Outcome::Done {
+                bytes: it.size,
+                handle: None,
+                delete: self.deletes_for(it),
+            });
         }
 
         let resume_off = self.resume.checkpoints.get(&i).copied();
@@ -756,9 +946,22 @@ impl Run<'_> {
             && ctx.verify != VerifyMode::Fast
             && it.size < self.plan.profile.large_threshold;
         let result = (|| -> Result<Outcome> {
-            let w = engine::write_file(ctx, &it.src, final_path, resume_off, it.size, defer, &mut on_ckpt)?;
+            let w = engine::write_file(
+                ctx,
+                &it.src,
+                final_path,
+                resume_off,
+                it.size,
+                defer,
+                &mut on_ckpt,
+            )?;
             if defer {
-                return Ok(Outcome::Deferred(Box::new(Deferred { i, w, final_path: final_path.to_path_buf(), replace })));
+                return Ok(Outcome::Deferred(Box::new(Deferred {
+                    i,
+                    w,
+                    final_path: final_path.to_path_buf(),
+                    replace,
+                })));
             }
             let large = w.size >= self.plan.profile.large_threshold;
             let flush_now = large || !self.plan.profile.nocache_write;
@@ -771,7 +974,11 @@ impl Run<'_> {
             engine::commit(&w.tmp, final_path, replace)?;
             engine::apply_final_attributes(final_path, &w.meta, w.hidden);
             let handle = if flush_now { None } else { Some(w.file) };
-            Ok(Outcome::Done { bytes: w.size, handle, delete: self.deletes_for(it) })
+            Ok(Outcome::Done {
+                bytes: w.size,
+                handle,
+                delete: self.deletes_for(it),
+            })
         })();
         if let Err(e) = &result {
             // Keep the partial file only when cancelled (resume continues from the checkpoint).
@@ -789,9 +996,17 @@ impl Run<'_> {
             let _ = std::fs::remove_file(final_path);
         }
         match std::os::unix::fs::symlink(&target, final_path) {
-            Ok(()) => Ok(Outcome::Done { bytes: 0, handle: None, delete: self.deletes_for(it) }),
+            Ok(()) => Ok(Outcome::Done {
+                bytes: 0,
+                handle: None,
+                delete: self.deletes_for(it),
+            }),
             Err(e) => {
-                self.ctx.warn(format!("lien symbolique « {} » non recréé ({}) : {e}", it.rel, self.plan.dst_volume.fs.label()));
+                self.ctx.warn(format!(
+                    "lien symbolique « {} » non recréé ({}) : {e}",
+                    it.rel,
+                    self.plan.dst_volume.fs.label()
+                ));
                 Ok(Outcome::Skipped("lien symbolique non supporté".into()))
             }
         }
@@ -799,25 +1014,44 @@ impl Run<'_> {
 
     #[cfg(windows)]
     fn copy_symlink(&self, it: &Item, _final_path: &Path, _replace: bool) -> Result<Outcome> {
-        self.ctx.warn(format!("lien symbolique / jonction « {} » ignoré", it.rel));
+        self.ctx
+            .warn(format!("lien symbolique / jonction « {} » ignoré", it.rel));
         Ok(Outcome::Skipped("lien symbolique".into()))
     }
 
     /// Decide what to do with an existing destination.
-    fn decide(&self, i: usize, it: &Item, dm: &std::fs::Metadata, final_path: &Path) -> Result<Decision> {
+    fn decide(
+        &self,
+        i: usize,
+        it: &Item,
+        dm: &std::fs::Metadata,
+        final_path: &Path,
+    ) -> Result<Decision> {
         if it.kind == ItemKind::Dir {
-            return Ok(Decision::Proceed { replace: false, path: final_path.to_path_buf() });
+            return Ok(Decision::Proceed {
+                replace: false,
+                path: final_path.to_path_buf(),
+            });
         }
         if dm.is_dir() {
-            return Err(Error::Other(format!("un dossier « {} » existe déjà à la destination", final_path.display())));
+            return Err(Error::Other(format!(
+                "un dossier « {} » existe déjà à la destination",
+                final_path.display()
+            )));
         }
         let mut recorded = self.resume.decisions.get(&i).copied();
         if self.resuming && it.kind == ItemKind::File && dm.len() == it.size {
             // Possibly our own commit from the interrupted run: compare contents.
             let same = engine::fingerprint_file(&self.ctx, &it.src)
-                .and_then(|(_, a)| engine::fingerprint_file(&self.ctx, final_path).map(|(_, b)| a == b))
+                .and_then(|(_, a)| {
+                    engine::fingerprint_file(&self.ctx, final_path).map(|(_, b)| a == b)
+                })
                 .unwrap_or(false);
-            if same && (self.resume.intents.contains(&i) || recorded.is_some() || self.plan.spec.on_conflict != OnConflict::KeepBoth) {
+            if same
+                && (self.resume.intents.contains(&i)
+                    || recorded.is_some()
+                    || self.plan.spec.on_conflict != OnConflict::KeepBoth)
+            {
                 self.ctx.stats.add_done(it.size);
                 self.ctx.stats.add_verified(it.size);
                 return Ok(Decision::AlreadyDone);
@@ -841,7 +1075,11 @@ impl Run<'_> {
                         };
                         // Holding the lock serializes questions between workers.
                         let d = self.ui.resolve_conflict(&info);
-                        let action = if d.action == OnConflict::Ask { OnConflict::Skip } else { d.action };
+                        let action = if d.action == OnConflict::Ask {
+                            OnConflict::Skip
+                        } else {
+                            d.action
+                        };
                         if d.apply_to_all {
                             *all = Some(action);
                         }
@@ -855,11 +1093,17 @@ impl Run<'_> {
         let tol = self.plan.dst_volume.fs.mtime_tolerance_ms() as i64;
         let dst_m = mtime_of(dm);
         let decision = match policy {
-            OnConflict::Overwrite | OnConflict::Ask => Decision::Proceed { replace: true, path: final_path.to_path_buf() },
+            OnConflict::Overwrite | OnConflict::Ask => Decision::Proceed {
+                replace: true,
+                path: final_path.to_path_buf(),
+            },
             OnConflict::Skip => Decision::Skip,
             OnConflict::Newer => {
                 if it.mtime_ms > dst_m + tol {
-                    Decision::Proceed { replace: true, path: final_path.to_path_buf() }
+                    Decision::Proceed {
+                        replace: true,
+                        path: final_path.to_path_buf(),
+                    }
                 } else {
                     Decision::Skip
                 }
@@ -867,20 +1111,32 @@ impl Run<'_> {
             OnConflict::IfDifferent => {
                 // FAT stores local time: also accept exact whole-hour offsets (DST / time zone).
                 let diff = (it.mtime_ms - dst_m).abs();
-                let hour_shift = self.plan.dst_volume.fs.is_fat_family() && diff % 3_600_000 <= tol && diff <= 14 * 3_600_000;
+                let hour_shift = self.plan.dst_volume.fs.is_fat_family()
+                    && diff % 3_600_000 <= tol
+                    && diff <= 14 * 3_600_000;
                 if dm.len() != it.size || (diff > tol && !hour_shift) {
-                    Decision::Proceed { replace: true, path: final_path.to_path_buf() }
+                    Decision::Proceed {
+                        replace: true,
+                        path: final_path.to_path_buf(),
+                    }
                 } else {
                     Decision::Skip
                 }
             }
             OnConflict::KeepBoth => {
-                let name = final_path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                let name = final_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
                 let mut n = 2;
                 loop {
                     let cand = final_path.with_file_name(numbered(&name, n));
                     if std::fs::symlink_metadata(sys::long_path(&cand)).is_err() {
-                        break Decision::Proceed { replace: false, path: cand };
+                        break Decision::Proceed {
+                            replace: false,
+                            path: cand,
+                        };
                     }
                     n += 1;
                 }
@@ -892,7 +1148,12 @@ impl Run<'_> {
     /// Restore directory dates (deepest first); remove emptied source dirs on move.
     fn finalize_dirs(&self) {
         let plan = self.plan;
-        for it in plan.items.iter().rev().filter(|it| it.kind == ItemKind::Dir) {
+        for it in plan
+            .items
+            .iter()
+            .rev()
+            .filter(|it| it.kind == ItemKind::Dir)
+        {
             let p = plan.dst_path(it);
             if it.mtime_ms > 0 {
                 let t = SystemTime::UNIX_EPOCH + Duration::from_millis(it.mtime_ms as u64);

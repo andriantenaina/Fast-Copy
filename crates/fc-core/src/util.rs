@@ -25,10 +25,16 @@ pub const PART_SUFFIX: &str = ".fcpart";
 /// Hidden temporary name used while a file is being written: `.name.fcpart`.
 /// Falls back to a hashed name when the result would exceed 255 UTF-16 units.
 pub fn temp_path(final_path: &Path) -> PathBuf {
-    let name = final_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = final_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let mut tmp = format!(".{name}{PART_SUFFIX}");
     if tmp.encode_utf16().count() > 255 {
-        tmp = format!(".{:016x}{PART_SUFFIX}", crate::hash::fingerprint(name.as_bytes()).0 as u64);
+        tmp = format!(
+            ".{:016x}{PART_SUFFIX}",
+            crate::hash::fingerprint(name.as_bytes()).0 as u64
+        );
     }
     final_path.with_file_name(tmp)
 }

@@ -97,7 +97,9 @@ pub fn preallocate(f: &File, size: u64) -> io::Result<()> {
     if size == 0 {
         return Ok(());
     }
-    let info = FILE_ALLOCATION_INFO { AllocationSize: size as i64 };
+    let info = FILE_ALLOCATION_INFO {
+        AllocationSize: size as i64,
+    };
     // SAFETY: valid handle, correctly sized struct.
     let ok = unsafe {
         SetFileInformationByHandle(
@@ -128,15 +130,21 @@ pub fn sync_dir(_dir: &Path) -> io::Result<()> {
 }
 
 /// Windows file attributes we preserve.
-pub const KEPT_ATTRIBUTES: u32 =
-    FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE;
+pub const KEPT_ATTRIBUTES: u32 = FILE_ATTRIBUTE_READONLY
+    | FILE_ATTRIBUTE_HIDDEN
+    | FILE_ATTRIBUTE_SYSTEM
+    | FILE_ATTRIBUTE_ARCHIVE;
 
 pub fn attributes(meta: &std::fs::Metadata) -> u32 {
     meta.file_attributes() & KEPT_ATTRIBUTES
 }
 
 pub fn set_attributes(path: &Path, attrs: u32) -> io::Result<()> {
-    let a = if attrs == 0 { FILE_ATTRIBUTE_NORMAL } else { attrs };
+    let a = if attrs == 0 {
+        FILE_ATTRIBUTE_NORMAL
+    } else {
+        attrs
+    };
     let w = wide(path.as_os_str());
     // SAFETY: valid NUL-terminated wide string.
     if unsafe { SetFileAttributesW(w.as_ptr(), a) } == 0 {
@@ -166,7 +174,12 @@ pub fn list_streams(path: &Path) -> Vec<String> {
     let mut data: WIN32_FIND_STREAM_DATA = unsafe { std::mem::zeroed() };
     // SAFETY: valid args; handle closed below.
     let h = unsafe {
-        FindFirstStreamW(w.as_ptr(), FindStreamInfoStandard, &mut data as *mut _ as *mut _, 0)
+        FindFirstStreamW(
+            w.as_ptr(),
+            FindStreamInfoStandard,
+            &mut data as *mut _ as *mut _,
+            0,
+        )
     };
     let mut out = Vec::new();
     if h == INVALID_HANDLE_VALUE {
@@ -174,7 +187,11 @@ pub fn list_streams(path: &Path) -> Vec<String> {
         return out;
     }
     loop {
-        let len = data.cStreamName.iter().position(|&c| c == 0).unwrap_or(data.cStreamName.len());
+        let len = data
+            .cStreamName
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(data.cStreamName.len());
         let name = String::from_utf16_lossy(&data.cStreamName[..len]);
         if name != "::$DATA" {
             if let Some(n) = name.strip_suffix(":$DATA") {
@@ -192,11 +209,18 @@ pub fn list_streams(path: &Path) -> Vec<String> {
 
 /// Named streams of an already-open file (no extra open).
 pub fn list_streams_handle(f: &File) -> Vec<String> {
-    use windows_sys::Win32::Storage::FileSystem::{FileStreamInfo, GetFileInformationByHandleEx, FILE_STREAM_INFO};
+    use windows_sys::Win32::Storage::FileSystem::{
+        FileStreamInfo, GetFileInformationByHandleEx, FILE_STREAM_INFO,
+    };
     let mut buf = vec![0u64; 8192]; // 64 KiB, 8-byte aligned
-    // SAFETY: buffer large and aligned; parsed within bounds below.
+                                    // SAFETY: buffer large and aligned; parsed within bounds below.
     let ok = unsafe {
-        GetFileInformationByHandleEx(f.as_raw_handle() as HANDLE, FileStreamInfo, buf.as_mut_ptr() as *mut _, (buf.len() * 8) as u32)
+        GetFileInformationByHandleEx(
+            f.as_raw_handle() as HANDLE,
+            FileStreamInfo,
+            buf.as_mut_ptr() as *mut _,
+            (buf.len() * 8) as u32,
+        )
     };
     let mut out = Vec::new();
     if ok == 0 {

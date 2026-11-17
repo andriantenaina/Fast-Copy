@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
 
 const RESERVED: &[&str] = &[
-    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-    "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹",
-    "LPT²", "LPT³",
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+    "LPT9", "LPT¹", "LPT²", "LPT³",
 ];
 
 fn fullwidth(c: char) -> Option<char> {
@@ -66,12 +66,23 @@ pub fn sanitize_component(name: &str, windows_rules: bool) -> String {
     // Trailing dots and spaces are silently stripped by Windows → replace them.
     let trimmed_len = s.trim_end_matches(['.', ' ']).len();
     if trimmed_len < s.len() {
-        let tail: String = s[trimmed_len..].chars().map(|c| if c == '.' { '．' } else { '_' }).collect();
+        let tail: String = s[trimmed_len..]
+            .chars()
+            .map(|c| if c == '.' { '．' } else { '_' })
+            .collect();
         s.truncate(trimmed_len);
         s.push_str(&tail);
     }
-    let stem = s.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
-    if RESERVED.iter().any(|r| r.eq_ignore_ascii_case(&stem) || *r == stem) {
+    let stem = s
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end()
+        .to_ascii_uppercase();
+    if RESERVED
+        .iter()
+        .any(|r| r.eq_ignore_ascii_case(&stem) || *r == stem)
+    {
         s.insert(0, '_');
     }
     if s.is_empty() {
@@ -149,8 +160,16 @@ pub fn is_junk(name: &str) -> bool {
     name.starts_with("._")
         || matches!(
             name,
-            ".DS_Store" | ".Spotlight-V100" | ".fseventsd" | ".Trashes" | ".TemporaryItems" | ".DocumentRevisions-V100"
-                | "Thumbs.db" | "desktop.ini" | "$RECYCLE.BIN" | "System Volume Information"
+            ".DS_Store"
+                | ".Spotlight-V100"
+                | ".fseventsd"
+                | ".Trashes"
+                | ".TemporaryItems"
+                | ".DocumentRevisions-V100"
+                | "Thumbs.db"
+                | "desktop.ini"
+                | "$RECYCLE.BIN"
+                | "System Volume Information"
         )
 }
 

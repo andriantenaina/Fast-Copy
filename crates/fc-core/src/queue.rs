@@ -69,7 +69,12 @@ impl EventSink for Forward<'_> {
 
 impl JobQueue {
     pub fn new(sink: Arc<dyn QueueSink>, ui: Arc<dyn Interaction>) -> JobQueue {
-        let inner = Arc::new(Inner { jobs: Mutex::new(VecDeque::new()), cv: Condvar::new(), sink, ui });
+        let inner = Arc::new(Inner {
+            jobs: Mutex::new(VecDeque::new()),
+            cv: Condvar::new(),
+            sink,
+            ui,
+        });
         let worker = inner.clone();
         std::thread::Builder::new()
             .name("fc-queue".into())
@@ -90,7 +95,14 @@ impl JobQueue {
 
     fn push(&self, plan: Plan, force: bool, resume: Option<ResumeState>) -> String {
         let id = plan.id.clone();
-        self.inner.jobs.lock().unwrap().push_back(Job { plan, control: Arc::new(Control::new()), state: QueueState::Pending, report: None, force, resume });
+        self.inner.jobs.lock().unwrap().push_back(Job {
+            plan,
+            control: Arc::new(Control::new()),
+            state: QueueState::Pending,
+            report: None,
+            force,
+            resume,
+        });
         self.changed();
         self.inner.cv.notify_all();
         id
@@ -135,8 +147,14 @@ impl JobQueue {
 
     pub fn cancel(&self, id: &str) {
         self.with_job(id, |j| match j.state {
-            QueueState::Running | QueueState::Paused if j.control.is_paused() || j.state == QueueState::Running => j.control.cancel(),
-            QueueState::Pending | QueueState::Paused => j.state = QueueState::Finished(JobStatus::Cancelled),
+            QueueState::Running | QueueState::Paused
+                if j.control.is_paused() || j.state == QueueState::Running =>
+            {
+                j.control.cancel()
+            }
+            QueueState::Pending | QueueState::Paused => {
+                j.state = QueueState::Finished(JobStatus::Cancelled)
+            }
             _ => {}
         });
     }
@@ -156,7 +174,11 @@ impl JobQueue {
 
     /// Remove finished jobs from the list.
     pub fn clear_finished(&self) {
-        self.inner.jobs.lock().unwrap().retain(|j| !matches!(j.state, QueueState::Finished(_)));
+        self.inner
+            .jobs
+            .lock()
+            .unwrap()
+            .retain(|j| !matches!(j.state, QueueState::Finished(_)));
         self.changed();
     }
 
@@ -171,7 +193,13 @@ fn entries(jobs: &VecDeque<Job>) -> Vec<QueueEntry> {
         .map(|j| QueueEntry {
             id: j.plan.id.clone(),
             state: j.state,
-            sources: j.plan.spec.sources.iter().map(|p| p.display().to_string()).collect(),
+            sources: j
+                .plan
+                .spec
+                .sources
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect(),
             dest: j.plan.spec.dest.display().to_string(),
             total_bytes: j.plan.total_bytes,
             total_files: j.plan.total_files,
@@ -193,14 +221,32 @@ fn worker_loop(inner: Arc<Inner>) {
                 jobs = inner.cv.wait(jobs).unwrap();
             }
         };
-        inner.sink.queue_changed(entries(&inner.jobs.lock().unwrap()));
-        let fwd = Forward { id: plan.id.clone(), sink: &*inner.sink };
-        let opts = ExecOptions { file_events: true, force, resume, ..Default::default() };
+        inner
+            .sink
+            .queue_changed(entries(&inner.jobs.lock().unwrap()));
+        let fwd = Forward {
+            id: plan.id.clone(),
+            sink: &*inner.sink,
+        };
+        let opts = ExecOptions {
+            file_events: true,
+            force,
+            resume,
+            ..Default::default()
+        };
         let result = execute(&plan, &control, &fwd, &*inner.ui, opts);
         let (state, report) = match result {
             Ok(r) => (QueueState::Finished(r.status), Some(r)),
             Err(e) => {
-                let r = Report { job_id: plan.id.clone(), status: JobStatus::Failed, errors: vec![crate::types::FileError { path: String::new(), error: e.to_string() }], ..Default::default() };
+                let r = Report {
+                    job_id: plan.id.clone(),
+                    status: JobStatus::Failed,
+                    errors: vec![crate::types::FileError {
+                        path: String::new(),
+                        error: e.to_string(),
+                    }],
+                    ..Default::default()
+                };
                 inner.sink.job_event(&plan.id, &Event::Finished(r.clone()));
                 (QueueState::Finished(JobStatus::Failed), Some(r))
             }
@@ -212,6 +258,8 @@ fn worker_loop(inner: Arc<Inner>) {
                 j.report = report;
             }
         }
-        inner.sink.queue_changed(entries(&inner.jobs.lock().unwrap()));
+        inner
+            .sink
+            .queue_changed(entries(&inner.jobs.lock().unwrap()));
     }
 }

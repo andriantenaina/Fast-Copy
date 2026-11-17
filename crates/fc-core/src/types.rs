@@ -348,7 +348,10 @@ pub trait Interaction: Send + Sync {
 pub struct NonInteractive;
 impl Interaction for NonInteractive {
     fn resolve_conflict(&self, _info: &ConflictInfo) -> ConflictDecision {
-        ConflictDecision { action: OnConflict::Skip, apply_to_all: true }
+        ConflictDecision {
+            action: OnConflict::Skip,
+            apply_to_all: true,
+        }
     }
     fn disk_full(&self, _path: &str, _needed: u64, _available: u64) -> DiskFullAction {
         DiskFullAction::Abort

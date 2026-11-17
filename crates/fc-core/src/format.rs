@@ -47,7 +47,12 @@ pub fn check_formattable(v: &VolumeInfo) -> Result<()> {
 pub fn clean_label(label: &str) -> String {
     let s: String = label
         .chars()
-        .filter(|c| !matches!(c, '"' | '\'' | '\\' | '/' | ':' | '*' | '?' | '<' | '>' | '|' | '=' | ';' | ',') && !c.is_control())
+        .filter(|c| {
+            !matches!(
+                c,
+                '"' | '\'' | '\\' | '/' | ':' | '*' | '?' | '<' | '>' | '|' | '=' | ';' | ','
+            ) && !c.is_control()
+        })
         .take(11)
         .collect();
     let s = s.trim().to_string();
@@ -65,7 +70,11 @@ pub fn valid_cluster(c: u64) -> bool {
 /// Path of the elevated helper shipped next to the current executable.
 pub fn helper_path() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
-    let name = if cfg!(windows) { "fc-helper.exe" } else { "fc-helper" };
+    let name = if cfg!(windows) {
+        "fc-helper.exe"
+    } else {
+        "fc-helper"
+    };
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or_default();
     let direct = dir.join(name);
     if direct.exists() {
@@ -85,12 +94,17 @@ pub fn helper_path() -> PathBuf {
 
 /// Format the volume to exFAT. Blocks until done.
 pub fn format_exfat(req: &FormatRequest) -> Result<VolumeInfo> {
-    let v = volume::volume_info(&req.volume).map_err(|e| Error::Other(format!("volume introuvable : {e}")))?;
+    let v = volume::volume_info(&req.volume)
+        .map_err(|e| Error::Other(format!("volume introuvable : {e}")))?;
     check_formattable(&v)?;
     let label = clean_label(&req.label);
-    let cluster = req.cluster.unwrap_or_else(|| volume::recommended_exfat_cluster(v.total_bytes, false));
+    let cluster = req
+        .cluster
+        .unwrap_or_else(|| volume::recommended_exfat_cluster(v.total_bytes, false));
     if !valid_cluster(cluster) {
-        return Err(Error::Other("taille de cluster invalide (512 o à 1 Mo, puissance de 2)".into()));
+        return Err(Error::Other(
+            "taille de cluster invalide (512 o à 1 Mo, puissance de 2)".into(),
+        ));
     }
     imp::format(&v, &label, cluster)?;
     // Wait for the new volume to mount, then limit OS clutter on it.
@@ -101,11 +115,16 @@ pub fn format_exfat(req: &FormatRequest) -> Result<VolumeInfo> {
             return Ok(nv);
         }
     }
-    Err(Error::Other("formatage terminé mais le volume n'est pas réapparu ; débranchez et rebranchez la clé".into()))
+    Err(Error::Other(
+        "formatage terminé mais le volume n'est pas réapparu ; débranchez et rebranchez la clé"
+            .into(),
+    ))
 }
 
 fn find_formatted(old: &VolumeInfo, label: &str) -> Option<VolumeInfo> {
-    volume::list_volumes().into_iter().find(|n| n.fs == volume::FsKind::ExFat && (n.disk_id == old.disk_id || n.label == label))
+    volume::list_volumes()
+        .into_iter()
+        .find(|n| n.fs == volume::FsKind::ExFat && (n.disk_id == old.disk_id || n.label == label))
 }
 
 /// Ask macOS not to index / log on the freshly formatted drive (harmless on Windows).
@@ -128,8 +147,12 @@ mod imp {
     use crate::sys::wide;
     use std::ffi::OsStr;
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject, INFINITE};
-    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, WaitForSingleObject, INFINITE,
+    };
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    };
 
     pub fn format(v: &VolumeInfo, label: &str, cluster: u64) -> Result<()> {
         let disk = v.disk_id.clone().unwrap_or_default();
@@ -142,14 +165,19 @@ mod imp {
         match code {
             0 => Ok(()),
             1223 => Err(Error::Other("élévation refusée par l'utilisateur".into())),
-            c => Err(Error::Other(format!("échec du formatage (code {c}) ; voir le journal de fc-helper"))),
+            c => Err(Error::Other(format!(
+                "échec du formatage (code {c}) ; voir le journal de fc-helper"
+            ))),
         }
     }
 
     /// Run `exe args` elevated (UAC prompt) and wait for its exit code.
     pub fn run_elevated(exe: &Path, args: &str) -> Result<u32> {
         if !exe.exists() {
-            return Err(Error::Other(format!("assistant introuvable : {}", exe.display())));
+            return Err(Error::Other(format!(
+                "assistant introuvable : {}",
+                exe.display()
+            )));
         }
         let verb = wide(OsStr::new("runas"));
         let file = wide(exe.as_os_str());
@@ -161,7 +189,7 @@ mod imp {
         info.lpFile = file.as_ptr();
         info.lpParameters = params.as_ptr();
         info.nShow = 0; // SW_HIDE
-        // SAFETY: struct initialised; strings outlive the call.
+                        // SAFETY: struct initialised; strings outlive the call.
         if unsafe { ShellExecuteExW(&mut info) } == 0 {
             let e = std::io::Error::last_os_error();
             if e.raw_os_error() == Some(1223) {
@@ -180,24 +208,44 @@ mod imp {
     }
 
     /// Executed *inside* the elevated helper: re-validate, then diskpart.
-    pub fn diskpart_format(disk: u32, letter: char, expect_size: u64, label: &str, cluster: u64) -> Result<String> {
+    pub fn diskpart_format(
+        disk: u32,
+        letter: char,
+        expect_size: u64,
+        label: &str,
+        cluster: u64,
+    ) -> Result<String> {
         let root = PathBuf::from(format!("{letter}:\\"));
-        let v = volume::volume_info(&root).map_err(|e| Error::Other(format!("volume {letter}: introuvable : {e}")))?;
+        let v = volume::volume_info(&root)
+            .map_err(|e| Error::Other(format!("volume {letter}: introuvable : {e}")))?;
         check_formattable(&v)?;
         if v.disk_id.as_deref() != Some(&disk.to_string()) {
-            return Err(Error::Other(format!("le lecteur {letter}: n'est plus sur le disque {disk} : abandon")));
+            return Err(Error::Other(format!(
+                "le lecteur {letter}: n'est plus sur le disque {disk} : abandon"
+            )));
         }
         if v.total_bytes != expect_size {
-            return Err(Error::Other("la taille du volume a changé depuis la confirmation : abandon".into()));
+            return Err(Error::Other(
+                "la taille du volume a changé depuis la confirmation : abandon".into(),
+            ));
         }
-        let unit = if cluster >= 1024 * 1024 { format!("{}M", cluster / (1024 * 1024)) } else { format!("{}K", cluster / 1024) };
+        let unit = if cluster >= 1024 * 1024 {
+            format!("{}M", cluster / (1024 * 1024))
+        } else {
+            format!("{}K", cluster / 1024)
+        };
         let script = format!(
             "select disk {disk}\r\nclean\r\nconvert mbr\r\ncreate partition primary align=1024\r\nformat fs=exfat unit={unit} quick label=\"{}\"\r\nassign letter={letter} noerr\r\nexit\r\n",
             clean_label(label)
         );
-        let path = std::env::temp_dir().join(format!("fastcopy-diskpart-{}.txt", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("fastcopy-diskpart-{}.txt", std::process::id()));
         std::fs::write(&path, script).map_err(|e| Error::io("écriture du script", &path, e))?;
-        let out = std::process::Command::new("diskpart.exe").arg("/s").arg(&path).output().map_err(|e| Error::io("diskpart", &path, e))?;
+        let out = std::process::Command::new("diskpart.exe")
+            .arg("/s")
+            .arg(&path)
+            .output()
+            .map_err(|e| Error::io("diskpart", &path, e))?;
         let _ = std::fs::remove_file(&path);
         let text = String::from_utf8_lossy(&out.stdout).to_string();
         if !out.status.success() {
@@ -211,15 +259,27 @@ mod imp {
 mod imp {
     use super::*;
     pub fn format(v: &VolumeInfo, label: &str, _cluster: u64) -> Result<()> {
-        let disk = v.disk_id.clone().ok_or_else(|| Error::Other("disque introuvable".into()))?;
+        let disk = v
+            .disk_id
+            .clone()
+            .ok_or_else(|| Error::Other("disque introuvable".into()))?;
         let out = std::process::Command::new("/usr/sbin/diskutil")
-            .args(["eraseDisk", "ExFAT", label, "MBRFormat", &format!("/dev/{disk}")])
+            .args([
+                "eraseDisk",
+                "ExFAT",
+                label,
+                "MBRFormat",
+                &format!("/dev/{disk}"),
+            ])
             .output()
             .map_err(|e| Error::io("diskutil", Path::new("/usr/sbin/diskutil"), e))?;
         if out.status.success() {
             Ok(())
         } else {
-            Err(Error::Other(format!("diskutil : {}", String::from_utf8_lossy(&out.stderr).trim())))
+            Err(Error::Other(format!(
+                "diskutil : {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )))
         }
     }
 }
@@ -228,7 +288,9 @@ mod imp {
 mod imp {
     use super::*;
     pub fn format(_v: &VolumeInfo, _label: &str, _cluster: u64) -> Result<()> {
-        Err(Error::Other("formatage non pris en charge sur ce système".into()))
+        Err(Error::Other(
+            "formatage non pris en charge sur ce système".into(),
+        ))
     }
 }
 

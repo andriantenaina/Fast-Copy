@@ -57,8 +57,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Shell::{
     IEnumExplorerCommand, IEnumExplorerCommand_Impl, IExplorerCommand, IExplorerCommand_Impl,
-    IShellItemArray, SHStrDupW, ECF_DEFAULT, ECF_HASSUBCOMMANDS, ECS_ENABLED,
-    ECS_HIDDEN, SIATTRIBFLAGS_AND, SIGDN_FILESYSPATH,
+    IShellItemArray, SHStrDupW, ECF_DEFAULT, ECF_HASSUBCOMMANDS, ECS_ENABLED, ECS_HIDDEN,
+    SIATTRIBFLAGS_AND, SIGDN_FILESYSPATH,
 };
 use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 

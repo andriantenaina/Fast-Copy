@@ -6,25 +6,28 @@ use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-    CM_Get_Parent, CM_Request_Device_EjectW, SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInterfaces,
-    SetupDiGetClassDevsW, SetupDiGetDeviceInterfaceDetailW, CR_SUCCESS, DIGCF_DEVICEINTERFACE,
-    DIGCF_PRESENT, SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA_W, SP_DEVINFO_DATA,
+    CM_Get_Parent, CM_Request_Device_EjectW, SetupDiDestroyDeviceInfoList,
+    SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW, SetupDiGetDeviceInterfaceDetailW,
+    CR_SUCCESS, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT, SP_DEVICE_INTERFACE_DATA,
+    SP_DEVICE_INTERFACE_DETAIL_DATA_W, SP_DEVINFO_DATA,
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::*;
 use windows_sys::Win32::System::Ioctl::{
-    GUID_DEVINTERFACE_DISK, IOCTL_STORAGE_GET_DEVICE_NUMBER, IOCTL_STORAGE_QUERY_PROPERTY,
     PropertyStandardQuery, StorageDeviceProperty, StorageDeviceSeekPenaltyProperty,
-    DEVICE_SEEK_PENALTY_DESCRIPTOR, STORAGE_DEVICE_DESCRIPTOR, STORAGE_DEVICE_NUMBER,
+    DEVICE_SEEK_PENALTY_DESCRIPTOR, GUID_DEVINTERFACE_DISK, IOCTL_STORAGE_GET_DEVICE_NUMBER,
+    IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_DEVICE_DESCRIPTOR, STORAGE_DEVICE_NUMBER,
     STORAGE_PROPERTY_QUERY,
 };
 use windows_sys::Win32::System::SystemServices::FILE_READ_ONLY_VOLUME;
-use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::WindowsProgramming::{DRIVE_REMOTE, DRIVE_REMOVABLE};
+use windows_sys::Win32::System::IO::DeviceIoControl;
 
 fn from_wide(buf: &[u16]) -> String {
     let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    OsString::from_wide(&buf[..len]).to_string_lossy().into_owned()
+    OsString::from_wide(&buf[..len])
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Mount root of the volume containing `p` (e.g. `E:\`).
@@ -70,12 +73,24 @@ fn open_device(path: &str) -> io::Result<Handle> {
 fn ioctl<T>(h: &Handle, code: u32, input: Option<&STORAGE_PROPERTY_QUERY>, out: &mut T) -> bool {
     let mut ret = 0u32;
     let (ip, il) = match input {
-        Some(q) => (q as *const _ as *const _, std::mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32),
+        Some(q) => (
+            q as *const _ as *const _,
+            std::mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+        ),
         None => (std::ptr::null(), 0),
     };
     // SAFETY: buffers sized by type.
     unsafe {
-        DeviceIoControl(h.0, code, ip, il, out as *mut T as *mut _, std::mem::size_of::<T>() as u32, &mut ret, std::ptr::null_mut()) != 0
+        DeviceIoControl(
+            h.0,
+            code,
+            ip,
+            il,
+            out as *mut T as *mut _,
+            std::mem::size_of::<T>() as u32,
+            &mut ret,
+            std::ptr::null_mut(),
+        ) != 0
     }
 }
 
@@ -94,8 +109,18 @@ struct DeviceProps {
 
 #[allow(non_upper_case_globals)]
 fn device_props(h: &Handle) -> DeviceProps {
-    let mut props = DeviceProps { bus: BusKind::Unknown, removable: false, model: String::new(), rotational: None, disk: None };
-    let q = STORAGE_PROPERTY_QUERY { PropertyId: StorageDeviceProperty, QueryType: PropertyStandardQuery, AdditionalParameters: [0] };
+    let mut props = DeviceProps {
+        bus: BusKind::Unknown,
+        removable: false,
+        model: String::new(),
+        rotational: None,
+        disk: None,
+    };
+    let q = STORAGE_PROPERTY_QUERY {
+        PropertyId: StorageDeviceProperty,
+        QueryType: PropertyStandardQuery,
+        AdditionalParameters: [0],
+    };
     let mut buf = [0u8; 1024];
     let mut ret = 0u32;
     // SAFETY: buffer sized.
@@ -113,7 +138,8 @@ fn device_props(h: &Handle) -> DeviceProps {
     };
     if ok && ret as usize >= std::mem::size_of::<STORAGE_DEVICE_DESCRIPTOR>() {
         // SAFETY: buffer holds a descriptor (possibly unaligned → read_unaligned).
-        let d: STORAGE_DEVICE_DESCRIPTOR = unsafe { std::ptr::read_unaligned(buf.as_ptr() as *const _) };
+        let d: STORAGE_DEVICE_DESCRIPTOR =
+            unsafe { std::ptr::read_unaligned(buf.as_ptr() as *const _) };
         props.removable = d.RemovableMedia != 0;
         props.bus = match d.BusType {
             BusTypeUsb => BusKind::Usb,
@@ -132,9 +158,15 @@ fn device_props(h: &Handle) -> DeviceProps {
             let end = tail.iter().position(|&c| c == 0).unwrap_or(tail.len());
             String::from_utf8_lossy(&tail[..end]).trim().to_string()
         };
-        props.model = format!("{} {}", s(d.VendorIdOffset), s(d.ProductIdOffset)).trim().to_string();
+        props.model = format!("{} {}", s(d.VendorIdOffset), s(d.ProductIdOffset))
+            .trim()
+            .to_string();
     }
-    let q = STORAGE_PROPERTY_QUERY { PropertyId: StorageDeviceSeekPenaltyProperty, QueryType: PropertyStandardQuery, AdditionalParameters: [0] };
+    let q = STORAGE_PROPERTY_QUERY {
+        PropertyId: StorageDeviceSeekPenaltyProperty,
+        QueryType: PropertyStandardQuery,
+        AdditionalParameters: [0],
+    };
     let mut sp: DEVICE_SEEK_PENALTY_DESCRIPTOR = unsafe { std::mem::zeroed() };
     if ioctl(h, IOCTL_STORAGE_QUERY_PROPERTY, Some(&q), &mut sp) {
         props.rotational = Some(sp.IncursSeekPenalty != 0);
@@ -176,7 +208,10 @@ pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
     let (mut avail, mut total, mut free) = (0u64, 0u64, 0u64);
     unsafe { GetDiskFreeSpaceExW(wroot.as_ptr(), &mut avail, &mut total, &mut free) };
     let (mut spc, mut bps, mut fc, mut tc) = (0u32, 0u32, 0u32, 0u32);
-    let cluster = if unsafe { GetDiskFreeSpaceW(wroot.as_ptr(), &mut spc, &mut bps, &mut fc, &mut tc) } != 0 {
+    let cluster = if unsafe {
+        GetDiskFreeSpaceW(wroot.as_ptr(), &mut spc, &mut bps, &mut fc, &mut tc)
+    } != 0
+    {
         (spc as u64 * bps as u64).max(512)
     } else {
         4096
@@ -200,7 +235,9 @@ pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
         is_system: false,
     };
 
-    if drive_type == DRIVE_REMOTE || root.to_string_lossy().starts_with(r"\\") && !root.to_string_lossy().starts_with(r"\\?\") {
+    if drive_type == DRIVE_REMOTE
+        || root.to_string_lossy().starts_with(r"\\") && !root.to_string_lossy().starts_with(r"\\?\")
+    {
         info.bus = BusKind::Network;
         if !matches!(fs, FsKind::Ntfs | FsKind::ReFs) {
             fs = FsKind::Network;
@@ -211,7 +248,10 @@ pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
 
     // Volume GUID path → device handle for storage queries.
     let mut vol = [0u16; 128];
-    if unsafe { GetVolumeNameForVolumeMountPointW(wroot.as_ptr(), vol.as_mut_ptr(), vol.len() as u32) } != 0 {
+    if unsafe {
+        GetVolumeNameForVolumeMountPointW(wroot.as_ptr(), vol.as_mut_ptr(), vol.len() as u32)
+    } != 0
+    {
         let vname = from_wide(&vol);
         let dev = vname.trim_end_matches('\\');
         if let Ok(h) = open_device(dev) {
@@ -256,7 +296,10 @@ pub fn eject(volume: &Path) -> io::Result<()> {
         .and_then(|d| d.parse().ok())
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "disque physique introuvable"))?;
     if info.is_system {
-        return Err(io::Error::new(io::ErrorKind::PermissionDenied, "refus : disque système"));
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "refus : disque système",
+        ));
     }
     let devinst = disk_devinst(disk)?;
     let mut parent = 0u32;
@@ -269,7 +312,9 @@ pub fn eject(volume: &Path) -> io::Result<()> {
         let mut veto = 0i32;
         let mut name = [0u16; 260];
         // SAFETY: buffers valid.
-        let r = unsafe { CM_Request_Device_EjectW(parent, &mut veto, name.as_mut_ptr(), name.len() as u32, 0) };
+        let r = unsafe {
+            CM_Request_Device_EjectW(parent, &mut veto, name.as_mut_ptr(), name.len() as u32, 0)
+        };
         if r == CR_SUCCESS && veto == 0 {
             return Ok(());
         }
@@ -283,16 +328,31 @@ pub fn eject(volume: &Path) -> io::Result<()> {
 fn disk_devinst(disk: u32) -> io::Result<u32> {
     // SAFETY: standard SetupAPI enumeration; set destroyed at end.
     unsafe {
-        let set = SetupDiGetClassDevsW(&GUID_DEVINTERFACE_DISK, std::ptr::null(), std::ptr::null_mut(), DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        let set = SetupDiGetClassDevsW(
+            &GUID_DEVINTERFACE_DISK,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
+        );
         if set as isize == -1 {
             return Err(io::Error::last_os_error());
         }
-        let mut result = Err(io::Error::new(io::ErrorKind::NotFound, "périphérique disque introuvable"));
+        let mut result = Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "périphérique disque introuvable",
+        ));
         let mut idx = 0u32;
         loop {
             let mut iface: SP_DEVICE_INTERFACE_DATA = std::mem::zeroed();
             iface.cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DATA>() as u32;
-            if SetupDiEnumDeviceInterfaces(set, std::ptr::null(), &GUID_DEVINTERFACE_DISK, idx, &mut iface) == 0 {
+            if SetupDiEnumDeviceInterfaces(
+                set,
+                std::ptr::null(),
+                &GUID_DEVINTERFACE_DISK,
+                idx,
+                &mut iface,
+            ) == 0
+            {
                 break;
             }
             idx += 1;
@@ -301,7 +361,15 @@ fn disk_devinst(disk: u32) -> io::Result<u32> {
             (*detail).cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
             let mut devinfo: SP_DEVINFO_DATA = std::mem::zeroed();
             devinfo.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
-            if SetupDiGetDeviceInterfaceDetailW(set, &iface, detail, (buf.len() * 8) as u32, std::ptr::null_mut(), &mut devinfo) == 0 {
+            if SetupDiGetDeviceInterfaceDetailW(
+                set,
+                &iface,
+                detail,
+                (buf.len() * 8) as u32,
+                std::ptr::null_mut(),
+                &mut devinfo,
+            ) == 0
+            {
                 continue;
             }
             let path_ptr = std::ptr::addr_of!((*detail).DevicePath) as *const u16;

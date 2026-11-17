@@ -52,19 +52,39 @@ pub enum Severity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum IssueKind {
-    SourceMissing { path: String },
+    SourceMissing {
+        path: String,
+    },
     DestInsideSource,
-    InsufficientSpace { needed: u64, available: u64 },
+    InsufficientSpace {
+        needed: u64,
+        available: u64,
+    },
     /// Files exceed the destination filesystem's limit (FAT32 4 GiB).
-    FileTooLarge { count: u64, largest: u64, limit: u64 },
+    FileTooLarge {
+        count: u64,
+        largest: u64,
+        limit: u64,
+    },
     /// Files will be split because of the FAT32 limit.
-    WillSplit { count: u64 },
+    WillSplit {
+        count: u64,
+    },
     /// Destination is read-only (e.g. NTFS drive on macOS).
-    ReadOnlyDestination { fs: String },
-    NamesChanged { count: u64 },
+    ReadOnlyDestination {
+        fs: String,
+    },
+    NamesChanged {
+        count: u64,
+    },
     /// FAT/exFAT has no journal: eject properly after copying.
-    NoJournal { fs: String },
-    WalkError { path: String, error: String },
+    NoJournal {
+        fs: String,
+    },
+    WalkError {
+        path: String,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +123,9 @@ pub struct Profile {
 
 impl Profile {
     pub fn choose(src: &VolumeInfo, dst: &VolumeInfo, threads: Option<usize>) -> Profile {
-        let cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        let cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
         let dst_slow = dst.is_external() || dst.rotational == Some(true);
         let src_hdd = src.rotational == Some(true);
         let mut p = if dst.is_network() || src.is_network() {
@@ -136,12 +158,24 @@ impl Profile {
             let usb = matches!(dst.bus, BusKind::Usb | BusKind::Sd) || dst.removable;
             let hdd = dst.rotational == Some(true);
             Profile {
-                name: if usb { "clé / disque USB".into() } else { "disque dur".into() },
+                name: if usb {
+                    "clé / disque USB".into()
+                } else {
+                    "disque dur".into()
+                },
                 // Internal HDD: big sequential writes. USB flash: moderate chunks (erase blocks).
                 chunk: if usb { 2 << 20 } else { 8 << 20 },
                 depth: 4,
                 // Internal HDD benefits from NCQ reordering; FAT on USB updates its table per file.
-                small_workers: if usb { if hdd { 2 } else { 1 } } else { 4 },
+                small_workers: if usb {
+                    if hdd {
+                        2
+                    } else {
+                        1
+                    }
+                } else {
+                    4
+                },
                 large_threshold: 1 << 20,
                 nocache_write: true,
                 parallel_lanes: false,
@@ -191,7 +225,10 @@ pub struct Plan {
 
 impl Plan {
     pub fn blocking_issues(&self) -> Vec<&Issue> {
-        self.issues.iter().filter(|i| i.severity == Severity::Error).collect()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Error)
+            .collect()
     }
 
     pub fn dst_path(&self, item: &Item) -> PathBuf {
@@ -218,7 +255,11 @@ pub fn mtime_ms(meta: &std::fs::Metadata) -> i64 {
 }
 
 fn issue(severity: Severity, kind: IssueKind, message: impl Into<String>) -> Issue {
-    Issue { severity, kind, message: message.into() }
+    Issue {
+        severity,
+        kind,
+        message: message.into(),
+    }
 }
 
 fn human(b: u64) -> String {
@@ -243,7 +284,9 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
             Err(e) => {
                 issues.push(issue(
                     Severity::Error,
-                    IssueKind::SourceMissing { path: src.display().to_string() },
+                    IssueKind::SourceMissing {
+                        path: src.display().to_string(),
+                    },
                     format!("source introuvable « {} » : {e}", src.display()),
                 ));
                 continue;
@@ -254,14 +297,28 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
             issues.push(issue(
                 Severity::Error,
                 IssueKind::DestInsideSource,
-                format!("la destination est à l'intérieur de la source « {} »", src.display()),
+                format!(
+                    "la destination est à l'intérieur de la source « {} »",
+                    src.display()
+                ),
             ));
             continue;
         }
-        let base = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let base = src
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         if meta.is_dir() {
             if !base.is_empty() {
-                raw.push(Item { kind: ItemKind::Dir, src: src.clone(), rel: base.clone(), dst_rel: String::new(), size: 0, mtime_ms: mtime_ms(&meta), parts: vec![] });
+                raw.push(Item {
+                    kind: ItemKind::Dir,
+                    src: src.clone(),
+                    rel: base.clone(),
+                    dst_rel: String::new(),
+                    size: 0,
+                    mtime_ms: mtime_ms(&meta),
+                    parts: vec![],
+                });
             }
             let skip_junk = spec.skip_junk;
             let walker = walkdir::WalkDir::new(src)
@@ -274,8 +331,18 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
                 let entry = match entry {
                     Ok(e) => e,
                     Err(e) => {
-                        let path = e.path().map(|p| p.display().to_string()).unwrap_or_default();
-                        issues.push(issue(Severity::Warning, IssueKind::WalkError { path: path.clone(), error: e.to_string() }, format!("lecture impossible « {path} » : {e}")));
+                        let path = e
+                            .path()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default();
+                        issues.push(issue(
+                            Severity::Warning,
+                            IssueKind::WalkError {
+                                path: path.clone(),
+                                error: e.to_string(),
+                            },
+                            format!("lecture impossible « {path} » : {e}"),
+                        ));
                         continue;
                     }
                 };
@@ -290,7 +357,14 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
                 let m = match entry.metadata() {
                     Ok(m) => m,
                     Err(e) => {
-                        issues.push(issue(Severity::Warning, IssueKind::WalkError { path: rel.clone(), error: e.to_string() }, format!("métadonnées illisibles « {rel} » : {e}")));
+                        issues.push(issue(
+                            Severity::Warning,
+                            IssueKind::WalkError {
+                                path: rel.clone(),
+                                error: e.to_string(),
+                            },
+                            format!("métadonnées illisibles « {rel} » : {e}"),
+                        ));
                         continue;
                     }
                 };
@@ -313,8 +387,20 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
                 });
             }
         } else {
-            let kind = if meta.file_type().is_symlink() { ItemKind::Symlink } else { ItemKind::File };
-            raw.push(Item { kind, src: src.clone(), rel: base, dst_rel: String::new(), size: meta.len(), mtime_ms: mtime_ms(&meta), parts: vec![] });
+            let kind = if meta.file_type().is_symlink() {
+                ItemKind::Symlink
+            } else {
+                ItemKind::File
+            };
+            raw.push(Item {
+                kind,
+                src: src.clone(),
+                rel: base,
+                dst_rel: String::new(),
+                size: meta.len(),
+                mtime_ms: mtime_ms(&meta),
+                parts: vec![],
+            });
         }
     }
 
@@ -325,7 +411,11 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
         for it in &raw {
             if it.kind == ItemKind::File && it.rel.ends_with(MANIFEST_SUFFIX) {
                 if let Ok(m) = SplitManifest::load(&it.src) {
-                    if m.total_size > spec.max_file_size_override.unwrap_or_else(|| dst_volume.fs.max_file_size()) {
+                    if m.total_size
+                        > spec
+                            .max_file_size_override
+                            .unwrap_or_else(|| dst_volume.fs.max_file_size())
+                    {
                         continue;
                     }
                     let dir = it.src.parent().unwrap_or(Path::new("")).to_path_buf();
@@ -340,7 +430,11 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
                     for extra in m.companion_files() {
                         consumed.insert(dir.join(extra));
                     }
-                    let rel_dir = it.rel.rsplit_once('/').map(|(d, _)| format!("{d}/")).unwrap_or_default();
+                    let rel_dir = it
+                        .rel
+                        .rsplit_once('/')
+                        .map(|(d, _)| format!("{d}/"))
+                        .unwrap_or_default();
                     joins.push(Item {
                         kind: ItemKind::Join,
                         src: it.src.clone(),
@@ -369,7 +463,12 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
             Some((p, n)) => (Some(p.to_string()), n.to_string()),
             None => (None, it.rel.clone()),
         };
-        let parent_dst = parent.as_ref().map(|p| dir_map.get(p).cloned().unwrap_or_else(|| sanitize_path(p, win_rules)));
+        let parent_dst = parent.as_ref().map(|p| {
+            dir_map
+                .get(p)
+                .cloned()
+                .unwrap_or_else(|| sanitize_path(p, win_rules))
+        });
         let clean = sanitize_component(&name, win_rules);
         let candidate = match &parent_dst {
             Some(p) if !p.is_empty() => format!("{p}/{clean}"),
@@ -386,12 +485,19 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
     }
 
     // Size checks.
-    let limit = spec.max_file_size_override.unwrap_or_else(|| dst_volume.fs.max_file_size());
-    let oversize: Vec<&Item> = raw.iter().filter(|i| matches!(i.kind, ItemKind::File) && i.size > limit).collect();
+    let limit = spec
+        .max_file_size_override
+        .unwrap_or_else(|| dst_volume.fs.max_file_size());
+    let oversize: Vec<&Item> = raw
+        .iter()
+        .filter(|i| matches!(i.kind, ItemKind::File) && i.size > limit)
+        .collect();
     if !oversize.is_empty() {
         let largest = oversize.iter().map(|i| i.size).max().unwrap_or(0);
         let count = oversize.len() as u64;
-        if spec.split == SplitMode::Auto && (dst_volume.fs.is_fat_family() || spec.max_file_size_override.is_some()) {
+        if spec.split == SplitMode::Auto
+            && (dst_volume.fs.is_fat_family() || spec.max_file_size_override.is_some())
+        {
             issues.push(issue(
                 Severity::Warning,
                 IssueKind::WillSplit { count },
@@ -426,23 +532,48 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
         } else {
             "la destination est en lecture seule."
         };
-        issues.push(issue(Severity::Error, IssueKind::ReadOnlyDestination { fs: dst_volume.fs.label() }, msg));
+        issues.push(issue(
+            Severity::Error,
+            IssueKind::ReadOnlyDestination {
+                fs: dst_volume.fs.label(),
+            },
+            msg,
+        ));
     }
 
-    let same_volume = spec.mode == Mode::Move && src_volume.same_volume(&dst_volume) && spec.sources.iter().all(|s| volume::detect(s).same_volume(&dst_volume));
+    let same_volume = spec.mode == Mode::Move
+        && src_volume.same_volume(&dst_volume)
+        && spec
+            .sources
+            .iter()
+            .all(|s| volume::detect(s).same_volume(&dst_volume));
 
-    let total_files = raw.iter().filter(|i| matches!(i.kind, ItemKind::File | ItemKind::Split | ItemKind::Join)).count() as u64;
+    let total_files = raw
+        .iter()
+        .filter(|i| matches!(i.kind, ItemKind::File | ItemKind::Split | ItemKind::Join))
+        .count() as u64;
     let total_dirs = raw.iter().filter(|i| i.kind == ItemKind::Dir).count() as u64;
     let total_bytes: u64 = raw.iter().map(|i| i.size).sum();
 
     if !same_volume {
         let cluster = dst_volume.cluster_size.max(512);
-        let needed: u64 = raw.iter().map(|i| round_up_u64(i.size, cluster)).sum::<u64>() + total_dirs * cluster;
+        let needed: u64 = raw
+            .iter()
+            .map(|i| round_up_u64(i.size, cluster))
+            .sum::<u64>()
+            + total_dirs * cluster;
         if dst_volume.free_bytes != u64::MAX && needed > dst_volume.free_bytes {
             issues.push(issue(
                 Severity::Error,
-                IssueKind::InsufficientSpace { needed, available: dst_volume.free_bytes },
-                format!("espace insuffisant : {} nécessaires, {} disponibles sur la destination", human(needed), human(dst_volume.free_bytes)),
+                IssueKind::InsufficientSpace {
+                    needed,
+                    available: dst_volume.free_bytes,
+                },
+                format!(
+                    "espace insuffisant : {} nécessaires, {} disponibles sur la destination",
+                    human(needed),
+                    human(dst_volume.free_bytes)
+                ),
             ));
         }
     }
@@ -457,8 +588,13 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
     if dst_volume.fs.is_fat_family() && dst_volume.is_external() {
         issues.push(issue(
             Severity::Info,
-            IssueKind::NoJournal { fs: dst_volume.fs.label() },
-            format!("{} n'a pas de journal : éjectez la clé proprement après la copie.", dst_volume.fs.label()),
+            IssueKind::NoJournal {
+                fs: dst_volume.fs.label(),
+            },
+            format!(
+                "{} n'a pas de journal : éjectez la clé proprement après la copie.",
+                dst_volume.fs.label()
+            ),
         ));
     }
 
@@ -480,7 +616,10 @@ pub fn build(spec: &JobSpec) -> Result<Plan> {
 }
 
 fn sanitize_path(rel: &str, win: bool) -> String {
-    rel.split('/').map(|c| sanitize_component(c, win)).collect::<Vec<_>>().join("/")
+    rel.split('/')
+        .map(|c| sanitize_component(c, win))
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn absolutize(p: &Path) -> PathBuf {

@@ -20,20 +20,40 @@ use crate::types::OnConflict;
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum Record {
     /// Full plan (first record).
-    Plan { plan: Box<Plan>, created_ms: i64 },
+    Plan {
+        plan: Box<Plan>,
+        created_ms: i64,
+    },
     /// Conflict decision taken for item `i` (before acting on it).
-    Decide { i: usize, action: OnConflict },
+    Decide {
+        i: usize,
+        action: OnConflict,
+    },
     /// About to commit (rename into place) item `i`.
-    Intent { i: usize },
+    Intent {
+        i: usize,
+    },
     /// Durable checkpoint: first `off` bytes of item `i`'s temp file are on disk.
-    Ckpt { i: usize, off: u64 },
+    Ckpt {
+        i: usize,
+        off: u64,
+    },
     /// Item `i` committed and durable.
-    Done { i: usize },
+    Done {
+        i: usize,
+    },
     /// Item skipped (conflict policy / junk).
-    Skip { i: usize },
-    Failed { i: usize, error: String },
+    Skip {
+        i: usize,
+    },
+    Failed {
+        i: usize,
+        error: String,
+    },
     /// Job ended.
-    End { status: String },
+    End {
+        status: String,
+    },
 }
 
 /// Reconstructed state of an interrupted job.
@@ -54,7 +74,10 @@ pub struct Journal {
 
 /// Where job journals live: `<local data>/FastCopy/jobs`.
 pub fn jobs_dir() -> PathBuf {
-    dirs::data_local_dir().unwrap_or_else(std::env::temp_dir).join("FastCopy").join("jobs")
+    dirs::data_local_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("FastCopy")
+        .join("jobs")
 }
 
 pub fn journal_path(job_id: &str) -> PathBuf {
@@ -62,7 +85,10 @@ pub fn journal_path(job_id: &str) -> PathBuf {
 }
 
 fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 impl Journal {
@@ -74,17 +100,34 @@ impl Journal {
     pub fn create_in(dir: &Path, plan: &Plan) -> Result<Journal> {
         std::fs::create_dir_all(dir).ctx("création du dossier des tâches", dir)?;
         let path = dir.join(format!("{}.jsonl", plan.id));
-        let f = OpenOptions::new().create(true).truncate(true).write(true).open(&path).ctx("création du journal", &path)?;
-        let j = Journal { path, w: Mutex::new(BufWriter::with_capacity(256 * 1024, f)) };
-        j.append(&Record::Plan { plan: Box::new(plan.clone()), created_ms: now_ms() })?;
+        let f = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&path)
+            .ctx("création du journal", &path)?;
+        let j = Journal {
+            path,
+            w: Mutex::new(BufWriter::with_capacity(256 * 1024, f)),
+        };
+        j.append(&Record::Plan {
+            plan: Box::new(plan.clone()),
+            created_ms: now_ms(),
+        })?;
         j.sync()?;
         Ok(j)
     }
 
     /// Re-open an existing journal for appending.
     pub fn reopen(path: &Path) -> Result<Journal> {
-        let f = OpenOptions::new().append(true).open(path).ctx("ouverture du journal", path)?;
-        Ok(Journal { path: path.to_path_buf(), w: Mutex::new(BufWriter::with_capacity(256 * 1024, f)) })
+        let f = OpenOptions::new()
+            .append(true)
+            .open(path)
+            .ctx("ouverture du journal", path)?;
+        Ok(Journal {
+            path: path.to_path_buf(),
+            w: Mutex::new(BufWriter::with_capacity(256 * 1024, f)),
+        })
     }
 
     pub fn path(&self) -> &Path {
@@ -94,19 +137,29 @@ impl Journal {
     pub fn append(&self, r: &Record) -> Result<()> {
         let mut line = serde_json::to_vec(r).map_err(|e| Error::Journal(e.to_string()))?;
         line.push(b'\n');
-        self.w.lock().unwrap().write_all(&line).map_err(|e| Error::Journal(e.to_string()))
+        self.w
+            .lock()
+            .unwrap()
+            .write_all(&line)
+            .map_err(|e| Error::Journal(e.to_string()))
     }
 
     /// Flush buffered records to the OS (cheap; durability comes with `sync`).
     pub fn flush(&self) -> Result<()> {
-        self.w.lock().unwrap().flush().map_err(|e| Error::Journal(e.to_string()))
+        self.w
+            .lock()
+            .unwrap()
+            .flush()
+            .map_err(|e| Error::Journal(e.to_string()))
     }
 
     /// Make every appended record durable.
     pub fn sync(&self) -> Result<()> {
         let mut w = self.w.lock().unwrap();
         w.flush().map_err(|e| Error::Journal(e.to_string()))?;
-        w.get_ref().sync_data().map_err(|e| Error::Journal(e.to_string()))
+        w.get_ref()
+            .sync_data()
+            .map_err(|e| Error::Journal(e.to_string()))
     }
 
     /// Load a journal: plan + state. Tolerates a truncated last line.
@@ -119,7 +172,9 @@ impl Journal {
             if line.trim().is_empty() {
                 continue;
             }
-            let Ok(rec) = serde_json::from_str::<Record>(&line) else { break };
+            let Ok(rec) = serde_json::from_str::<Record>(&line) else {
+                break;
+            };
             match rec {
                 Record::Plan { plan: p, .. } => plan = Some(*p),
                 Record::Decide { i, action } => {
@@ -142,7 +197,9 @@ impl Journal {
                 Record::End { status } => st.ended = Some(status),
             }
         }
-        let plan = plan.ok_or_else(|| Error::Journal(format!("journal vide ou corrompu : {}", path.display())))?;
+        let plan = plan.ok_or_else(|| {
+            Error::Journal(format!("journal vide ou corrompu : {}", path.display()))
+        })?;
         Ok((plan, st))
     }
 }
@@ -169,7 +226,9 @@ impl JobSummary {
 
 pub fn list_jobs() -> Vec<JobSummary> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(jobs_dir()) else { return out };
+    let Ok(rd) = std::fs::read_dir(jobs_dir()) else {
+        return out;
+    };
     for e in rd.flatten() {
         let p = e.path();
         if p.extension().and_then(|s| s.to_str()) != Some("jsonl") {
@@ -196,7 +255,12 @@ pub fn list_jobs() -> Vec<JobSummary> {
                 sources: plan.spec.sources.clone(),
                 dest: plan.spec.dest.clone(),
                 total_files: plan.total_files,
-                done_files: st.done.iter().chain(st.skipped.iter()).filter(|i| file_items.contains(i)).count() as u64,
+                done_files: st
+                    .done
+                    .iter()
+                    .chain(st.skipped.iter())
+                    .filter(|i| file_items.contains(i))
+                    .count() as u64,
                 total_bytes: plan.total_bytes,
                 ended: st.ended,
                 modified_ms,

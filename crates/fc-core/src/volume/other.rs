@@ -34,7 +34,8 @@ fn fs_type(root: &Path) -> String {
 
 pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
     let root = volume_root(p)?;
-    let c = CString::new(root.as_os_str().as_bytes()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+    let c = CString::new(root.as_os_str().as_bytes())
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
     let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
     // SAFETY: valid args.
     if unsafe { libc::statvfs(c.as_ptr(), &mut s) } != 0 {
@@ -42,7 +43,10 @@ pub fn volume_info(p: &Path) -> io::Result<VolumeInfo> {
     }
     Ok(VolumeInfo {
         fs: FsKind::from_name(&fs_type(&root)),
-        label: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        label: root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         total_bytes: s.f_blocks as u64 * s.f_frsize as u64,
         free_bytes: s.f_bavail as u64 * s.f_frsize as u64,
         cluster_size: (s.f_bsize as u64).max(512),
@@ -62,6 +66,13 @@ pub fn list_volumes() -> Vec<VolumeInfo> {
 }
 
 pub fn eject(volume: &Path) -> io::Result<()> {
-    let st = std::process::Command::new("udisksctl").args(["unmount", "-b"]).arg(volume).status()?;
-    if st.success() { Ok(()) } else { Err(io::Error::other("échec de l'éjection")) }
+    let st = std::process::Command::new("udisksctl")
+        .args(["unmount", "-b"])
+        .arg(volume)
+        .status()?;
+    if st.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("échec de l'éjection"))
+    }
 }

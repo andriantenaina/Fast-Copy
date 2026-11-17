@@ -31,25 +31,36 @@ pub fn copy_locked(pairs: &[VssPair], verify: crate::types::VerifyMode) -> Resul
     let id = uuid::Uuid::new_v4();
     let input = dir.join(format!("fastcopy-vss-{id}.json"));
     let output = dir.join(format!("fastcopy-vss-{id}.out.json"));
-    std::fs::write(&input, serde_json::to_vec(pairs).unwrap()).map_err(|e| Error::io("écriture", &input, e))?;
+    std::fs::write(&input, serde_json::to_vec(pairs).unwrap())
+        .map_err(|e| Error::io("écriture", &input, e))?;
     let v = match verify {
         crate::types::VerifyMode::Fast => "fast",
         crate::types::VerifyMode::Full => "full",
         crate::types::VerifyMode::Paranoid => "paranoid",
     };
-    let args = format!("vss-copy --input \"{}\" --output \"{}\" --verify {v}", input.display(), output.display());
+    let args = format!(
+        "vss-copy --input \"{}\" --output \"{}\" --verify {v}",
+        input.display(),
+        output.display()
+    );
     let code = crate::format::run_elevated(&crate::format::helper_path(), &args)?;
     let _ = std::fs::remove_file(&input);
     if code == 1223 {
-        return Err(Error::Other("élévation refusée : fichiers verrouillés non copiés".into()));
+        return Err(Error::Other(
+            "élévation refusée : fichiers verrouillés non copiés".into(),
+        ));
     }
-    let data = std::fs::read(&output).map_err(|e| Error::Other(format!("résultat VSS absent (code {code}) : {e}")))?;
+    let data = std::fs::read(&output)
+        .map_err(|e| Error::Other(format!("résultat VSS absent (code {code}) : {e}")))?;
     let _ = std::fs::remove_file(&output);
     serde_json::from_slice(&data).map_err(|e| Error::Other(format!("résultat VSS invalide : {e}")))
 }
 
 #[cfg(not(windows))]
-pub fn copy_locked(_pairs: &[VssPair], _verify: crate::types::VerifyMode) -> Result<Vec<VssResult>> {
+pub fn copy_locked(
+    _pairs: &[VssPair],
+    _verify: crate::types::VerifyMode,
+) -> Result<Vec<VssResult>> {
     Err(Error::Other("VSS n'existe que sous Windows".into()))
 }
 
@@ -65,8 +76,16 @@ pub fn create_snapshot(volume: &str) -> Result<(String, String)> {
          Write-Output \"$($r.ShadowID)|$($s.DeviceObject)\""
     );
     let out = powershell(&ps)?;
-    let line = out.lines().rev().find(|l| l.contains('|')).unwrap_or("").trim().to_string();
-    let (id, dev) = line.split_once('|').ok_or_else(|| Error::Other(format!("création du cliché VSS échouée : {out}")))?;
+    let line = out
+        .lines()
+        .rev()
+        .find(|l| l.contains('|'))
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let (id, dev) = line
+        .split_once('|')
+        .ok_or_else(|| Error::Other(format!("création du cliché VSS échouée : {out}")))?;
     Ok((id.to_string(), dev.to_string()))
 }
 
@@ -80,13 +99,23 @@ pub fn delete_snapshot(id: &str) -> Result<()> {
 fn powershell(script: &str) -> Result<String> {
     use std::os::windows::process::CommandExt;
     let out = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
         .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .output()
         .map_err(|e| Error::Other(format!("powershell : {e}")))?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     if !out.status.success() {
-        return Err(Error::Other(format!("{text}{}", String::from_utf8_lossy(&out.stderr))));
+        return Err(Error::Other(format!(
+            "{text}{}",
+            String::from_utf8_lossy(&out.stderr)
+        )));
     }
     Ok(text)
 }

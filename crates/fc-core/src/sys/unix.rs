@@ -41,7 +41,12 @@ pub fn open_read(path: &Path, nocache: bool) -> io::Result<File> {
 }
 
 pub fn open_write_new(path: &Path, nocache: bool) -> io::Result<File> {
-    let f = OpenOptions::new().read(true).write(true).create(true).truncate(true).open(path)?;
+    let f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)?;
     if nocache {
         set_nocache(&f);
     }
@@ -96,7 +101,14 @@ pub fn preallocate(f: &File, size: u64) -> io::Result<()> {
         return Ok(());
     }
     // SAFETY: valid fd.
-    let r = unsafe { libc::fallocate(f.as_raw_fd(), libc::FALLOC_FL_KEEP_SIZE, 0, size as libc::off_t) };
+    let r = unsafe {
+        libc::fallocate(
+            f.as_raw_fd(),
+            libc::FALLOC_FL_KEEP_SIZE,
+            0,
+            size as libc::off_t,
+        )
+    };
     if r != 0 {
         return Err(io::Error::last_os_error());
     }
@@ -126,7 +138,14 @@ pub fn sync_dir(dir: &Path) -> io::Result<()> {
     match f.sync_all() {
         Ok(()) => Ok(()),
         // Some filesystems (exFAT/msdos on macOS) refuse fsync on directories.
-        Err(e) if matches!(e.raw_os_error(), Some(libc::EINVAL) | Some(libc::ENOTSUP) | Some(libc::EBADF)) => Ok(()),
+        Err(e)
+            if matches!(
+                e.raw_os_error(),
+                Some(libc::EINVAL) | Some(libc::ENOTSUP) | Some(libc::EBADF)
+            ) =>
+        {
+            Ok(())
+        }
         Err(e) => Err(e),
     }
 }
@@ -163,25 +182,39 @@ pub fn copy_streams(_src: &Path, _dst: &Path, _streams: &[String]) -> io::Result
 
 #[cfg(target_os = "macos")]
 fn cpath(p: &Path) -> io::Result<CString> {
-    CString::new(p.as_os_str().as_bytes()).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL dans le chemin"))
+    CString::new(p.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL dans le chemin"))
 }
 
 /// Extended attribute names (macOS).
 #[cfg(target_os = "macos")]
 pub fn list_xattrs(path: &Path) -> Vec<String> {
-    let Ok(c) = cpath(path) else { return Vec::new() };
+    let Ok(c) = cpath(path) else {
+        return Vec::new();
+    };
     // SAFETY: querying size with null buffer.
-    let size = unsafe { libc::listxattr(c.as_ptr(), std::ptr::null_mut(), 0, libc::XATTR_NOFOLLOW) };
+    let size =
+        unsafe { libc::listxattr(c.as_ptr(), std::ptr::null_mut(), 0, libc::XATTR_NOFOLLOW) };
     if size <= 0 {
         return Vec::new();
     }
     let mut buf = vec![0u8; size as usize];
-    let n = unsafe { libc::listxattr(c.as_ptr(), buf.as_mut_ptr() as *mut _, buf.len(), libc::XATTR_NOFOLLOW) };
+    let n = unsafe {
+        libc::listxattr(
+            c.as_ptr(),
+            buf.as_mut_ptr() as *mut _,
+            buf.len(),
+            libc::XATTR_NOFOLLOW,
+        )
+    };
     if n <= 0 {
         return Vec::new();
     }
     buf.truncate(n as usize);
-    buf.split(|&b| b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect()
+    buf.split(|&b| b == 0)
+        .filter(|s| !s.is_empty())
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect()
 }
 
 /// Copy all extended attributes (incl. resource forks, Finder info). Returns count copied.
@@ -194,19 +227,42 @@ pub fn copy_xattrs(src: &Path, dst: &Path) -> io::Result<usize> {
     for name in names {
         let Ok(cn) = CString::new(name) else { continue };
         // SAFETY: size query.
-        let size = unsafe { libc::getxattr(cs.as_ptr(), cn.as_ptr(), std::ptr::null_mut(), 0, 0, libc::XATTR_NOFOLLOW) };
+        let size = unsafe {
+            libc::getxattr(
+                cs.as_ptr(),
+                cn.as_ptr(),
+                std::ptr::null_mut(),
+                0,
+                0,
+                libc::XATTR_NOFOLLOW,
+            )
+        };
         if size < 0 {
             continue;
         }
         let mut buf = vec![0u8; size as usize];
         let got = unsafe {
-            libc::getxattr(cs.as_ptr(), cn.as_ptr(), buf.as_mut_ptr() as *mut _, buf.len(), 0, libc::XATTR_NOFOLLOW)
+            libc::getxattr(
+                cs.as_ptr(),
+                cn.as_ptr(),
+                buf.as_mut_ptr() as *mut _,
+                buf.len(),
+                0,
+                libc::XATTR_NOFOLLOW,
+            )
         };
         if got < 0 {
             continue;
         }
         let r = unsafe {
-            libc::setxattr(cd.as_ptr(), cn.as_ptr(), buf.as_ptr() as *const _, got as usize, 0, libc::XATTR_NOFOLLOW)
+            libc::setxattr(
+                cd.as_ptr(),
+                cn.as_ptr(),
+                buf.as_ptr() as *const _,
+                got as usize,
+                0,
+                libc::XATTR_NOFOLLOW,
+            )
         };
         if r != 0 {
             return Err(io::Error::last_os_error());

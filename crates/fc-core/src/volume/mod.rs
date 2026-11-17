@@ -60,8 +60,15 @@ impl FsKind {
 
     /// Windows-style naming rules apply (forbidden chars, reserved names).
     pub fn windows_names(&self) -> bool {
-        matches!(self, FsKind::Fat32 | FsKind::Fat | FsKind::ExFat | FsKind::Ntfs | FsKind::ReFs | FsKind::Network)
-            || cfg!(windows)
+        matches!(
+            self,
+            FsKind::Fat32
+                | FsKind::Fat
+                | FsKind::ExFat
+                | FsKind::Ntfs
+                | FsKind::ReFs
+                | FsKind::Network
+        ) || cfg!(windows)
     }
 
     /// No journal: unplugging mid-write may corrupt the volume.
@@ -71,7 +78,10 @@ impl FsKind {
 
     /// Supports extended attributes / ADS without polluting the volume.
     pub fn supports_xattrs(&self) -> bool {
-        matches!(self, FsKind::Apfs | FsKind::Hfs | FsKind::Ntfs | FsKind::ReFs)
+        matches!(
+            self,
+            FsKind::Apfs | FsKind::Hfs | FsKind::Ntfs | FsKind::ReFs
+        )
     }
 
     /// Supports copy-on-write cloning.

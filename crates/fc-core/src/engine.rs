@@ -94,10 +94,13 @@ pub fn stream(
             let mut pos = 0u64;
             while pos < len {
                 ctx.control.checkpoint()?;
-                let Ok(mut buf) = free_rx.recv() else { return Ok(()) };
+                let Ok(mut buf) = free_rx.recv() else {
+                    return Ok(());
+                };
                 let want = (len - pos).min(chunk as u64) as usize;
                 let req = read_request(want, src_nocache).min(buf.capacity());
-                let n = sys::read_full_at(src, &mut buf[..req], src_off + pos).ctx("lecture", src_path)?;
+                let n = sys::read_full_at(src, &mut buf[..req], src_off + pos)
+                    .ctx("lecture", src_path)?;
                 let used = n.min(want);
                 if used < want {
                     // The file shrank while we were copying it.
@@ -126,7 +129,8 @@ pub fn stream(
                 } else {
                     n
                 };
-                sys::write_all_at(dst, &buf[..wlen], dst_off + written).ctx("écriture", dst_path)?;
+                sys::write_all_at(dst, &buf[..wlen], dst_off + written)
+                    .ctx("écriture", dst_path)?;
                 written += n as u64;
                 ctx.stats.add_done(n as u64);
                 if written - last_ckpt >= ctx.profile.checkpoint_bytes && written < len {
@@ -139,7 +143,9 @@ pub fn stream(
         })();
         drop(full_rx);
         drop(free_tx);
-        let read_result = reader.join().unwrap_or_else(|_| Err(Error::Other("thread de lecture interrompu".into())));
+        let read_result = reader
+            .join()
+            .unwrap_or_else(|_| Err(Error::Other("thread de lecture interrompu".into())));
         // Reader errors (source changed / read error / cancel) take precedence: they explain
         // why the writer saw a short stream.
         read_result?;
@@ -148,7 +154,16 @@ pub fn stream(
 }
 
 /// Hash `len` bytes of `f` from `off` into `hasher`, reading in large aligned chunks.
-pub fn hash_into(ctx: &Ctx, f: &File, nocache: bool, path: &Path, off: u64, len: u64, hasher: &mut Hasher, count_verified: bool) -> Result<()> {
+pub fn hash_into(
+    ctx: &Ctx,
+    f: &File,
+    nocache: bool,
+    path: &Path,
+    off: u64,
+    len: u64,
+    hasher: &mut Hasher,
+    count_verified: bool,
+) -> Result<()> {
     let chunk = ctx.profile.chunk.max(ALIGN);
     let mut buf = AlignedBuf::new(chunk);
     let mut pos = 0u64;
@@ -199,7 +214,10 @@ pub struct SrcStamp {
 }
 
 pub fn stamp(meta: &std::fs::Metadata) -> SrcStamp {
-    SrcStamp { size: meta.len(), mtime: meta.modified().ok() }
+    SrcStamp {
+        size: meta.len(),
+        mtime: meta.modified().ok(),
+    }
 }
 
 /// A file fully written to its temporary path, not yet committed.
@@ -274,7 +292,9 @@ pub fn write_file(
         None => {
             let f = match sys::open_write_new(&ltmp, dst_nocache) {
                 Ok(f) => f,
-                Err(e) if crate::error::is_disk_full(&e) => return Err(Error::io("création", &tmp, e)),
+                Err(e) if crate::error::is_disk_full(&e) => {
+                    return Err(Error::io("création", &tmp, e))
+                }
                 Err(e) => return Err(Error::io("création", &tmp, e)),
             };
             if large {
@@ -286,10 +306,24 @@ pub fn write_file(
         }
     };
 
-    stream(ctx, &src, src_nocache, src_path, start, size - start, &dst, dst_nocache, &tmp, start, &mut hasher, &mut [], &mut |off| {
-        sys::full_sync(&dst).ctx("vidage", &tmp)?;
-        on_ckpt(off)
-    })?;
+    stream(
+        ctx,
+        &src,
+        src_nocache,
+        src_path,
+        start,
+        size - start,
+        &dst,
+        dst_nocache,
+        &tmp,
+        start,
+        &mut hasher,
+        &mut [],
+        &mut |off| {
+            sys::full_sync(&dst).ctx("vidage", &tmp)?;
+            on_ckpt(off)
+        },
+    )?;
     dst.set_len(size).ctx("finalisation", &tmp)?;
 
     let meta1 = src.metadata().ctx("lecture des métadonnées", src_path)?;
@@ -297,7 +331,16 @@ pub fn write_file(
         return Err(Error::SourceChanged(src_path.to_path_buf()));
     }
     let streams = sys::list_streams_handle(&src);
-    Ok(Written { tmp, file: dst, hash: hasher.finish(), size, meta: meta0, dst_nocache, hidden: large, streams })
+    Ok(Written {
+        tmp,
+        file: dst,
+        hash: hasher.finish(),
+        size,
+        meta: meta0,
+        dst_nocache,
+        hidden: large,
+        streams,
+    })
 }
 
 /// Verify per the configured mode (the temp file must already be flushed).
@@ -338,7 +381,14 @@ fn verify_handle(ctx: &Ctx, w: &Written) -> Result<()> {
 /// Apply timestamps (incl. creation time where supported) through the open handle,
 /// then extended attributes / alternate data streams when the destination supports them.
 /// `streams`: the source's alternate data streams (Windows; empty elsewhere).
-pub fn apply_metadata(ctx: &Ctx, file: &File, tmp: &Path, src_path: &Path, meta: &std::fs::Metadata, streams: &[String]) {
+pub fn apply_metadata(
+    ctx: &Ctx,
+    file: &File,
+    tmp: &Path,
+    src_path: &Path,
+    meta: &std::fs::Metadata,
+    streams: &[String],
+) {
     let mut times = std::fs::FileTimes::new();
     if let Ok(m) = meta.modified() {
         times = times.set_modified(m);
@@ -361,7 +411,10 @@ pub fn apply_metadata(ctx: &Ctx, file: &File, tmp: &Path, src_path: &Path, meta:
         }
     }
     if let Err(e) = file.set_times(times) {
-        ctx.warn(format!("horodatage non appliqué à « {} » : {e}", tmp.display()));
+        ctx.warn(format!(
+            "horodatage non appliqué à « {} » : {e}",
+            tmp.display()
+        ));
     }
 
     let lsrc = sys::long_path(src_path);
@@ -371,7 +424,10 @@ pub fn apply_metadata(ctx: &Ctx, file: &File, tmp: &Path, src_path: &Path, meta:
         if !streams.is_empty() {
             if matches!(ctx.dst_fs, FsKind::Ntfs | FsKind::ReFs) {
                 if let Err(e) = sys::copy_streams(&lsrc, &ltmp, streams) {
-                    ctx.warn(format!("flux de données alternatifs non copiés pour « {} » : {e}", src_path.display()));
+                    ctx.warn(format!(
+                        "flux de données alternatifs non copiés pour « {} » : {e}",
+                        src_path.display()
+                    ));
                 }
             } else if streams.iter().any(|s| s != ":Zone.Identifier") {
                 ctx.warn(format!(
@@ -388,12 +444,19 @@ pub fn apply_metadata(ctx: &Ctx, file: &File, tmp: &Path, src_path: &Path, meta:
         let _ = streams;
         if ctx.dst_fs.supports_xattrs() {
             if let Err(e) = sys::copy_xattrs(&lsrc, &ltmp) {
-                ctx.warn(format!("attributs étendus non copiés pour « {} » : {e}", src_path.display()));
+                ctx.warn(format!(
+                    "attributs étendus non copiés pour « {} » : {e}",
+                    src_path.display()
+                ));
             }
         } else {
             let names: Vec<String> = sys::list_xattrs(&lsrc)
                 .into_iter()
-                .filter(|n| n != "com.apple.quarantine" && n != "com.apple.lastuseddate#PS" && n != "com.apple.provenance")
+                .filter(|n| {
+                    n != "com.apple.quarantine"
+                        && n != "com.apple.lastuseddate#PS"
+                        && n != "com.apple.provenance"
+                })
                 .collect();
             if !names.is_empty() {
                 ctx.warn(format!(
@@ -456,13 +519,22 @@ pub fn try_clone(src: &Path, tmp: &Path) -> bool {
 /// Write an oversize file as chunks of `chunk` bytes next to `final_path`
 /// (`name.001`, `name.002`…) plus manifest, `.sha256` and join scripts.
 /// Every chunk is flushed, verified and committed atomically.
-pub fn write_split(ctx: &Ctx, src_path: &Path, final_path: &Path, chunk: u64) -> Result<Vec<PathBuf>> {
+pub fn write_split(
+    ctx: &Ctx,
+    src_path: &Path,
+    final_path: &Path,
+    chunk: u64,
+) -> Result<Vec<PathBuf>> {
     assert!(chunk % ALIGN as u64 == 0, "split chunk must be aligned");
-    let meta0 = std::fs::metadata(sys::long_path(src_path)).ctx("lecture des métadonnées", src_path)?;
+    let meta0 =
+        std::fs::metadata(sys::long_path(src_path)).ctx("lecture des métadonnées", src_path)?;
     let size = meta0.len();
     let (src, src_nc) = open_src(src_path, true)?;
     let dir = final_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let name = final_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = final_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let count = size.div_ceil(chunk).max(1) as usize;
     let mut whole_sha = Sha256::new();
     let mut parts = Vec::with_capacity(count);
@@ -480,7 +552,21 @@ pub fn write_split(ctx: &Ctx, src_path: &Path, final_path: &Path, chunk: u64) ->
         let mut h = Hasher::new();
         let mut psha = Sha256::new();
         // One pass feeds the part hash, the part SHA-256 and the whole-file SHA-256.
-        stream(ctx, &src, src_nc, src_path, off, len, &dst, ctx.profile.nocache_write, &ptmp, 0, &mut h, &mut [&mut psha, &mut whole_sha], &mut |_| Ok(()))?;
+        stream(
+            ctx,
+            &src,
+            src_nc,
+            src_path,
+            off,
+            len,
+            &dst,
+            ctx.profile.nocache_write,
+            &ptmp,
+            0,
+            &mut h,
+            &mut [&mut psha, &mut whole_sha],
+            &mut |_| Ok(()),
+        )?;
         dst.set_len(len).ctx("finalisation", &ptmp)?;
         sys::full_sync(&dst).ctx("vidage", &ptmp)?;
         if ctx.verify != VerifyMode::Fast {
@@ -491,10 +577,15 @@ pub fn write_split(ctx: &Ctx, src_path: &Path, final_path: &Path, chunk: u64) ->
         apply_metadata(ctx, &dst, &ptmp, src_path, &meta0, &[]);
         drop(dst);
         commit(&ptmp, &pfinal, true)?;
-        parts.push(PartInfo { name: pname, size: len, sha256: psha.finish_hex() });
+        parts.push(PartInfo {
+            name: pname,
+            size: len,
+            sha256: psha.finish_hex(),
+        });
         finals.push(pfinal);
     }
-    let meta1 = std::fs::metadata(sys::long_path(src_path)).ctx("lecture des métadonnées", src_path)?;
+    let meta1 =
+        std::fs::metadata(sys::long_path(src_path)).ctx("lecture des métadonnées", src_path)?;
     if stamp(&meta0) != stamp(&meta1) {
         return Err(Error::SourceChanged(src_path.to_path_buf()));
     }
@@ -514,12 +605,22 @@ pub fn write_split(ctx: &Ctx, src_path: &Path, final_path: &Path, chunk: u64) ->
 
 /// Reassemble a split set into `final_path`'s temp file, verifying every part's and the
 /// whole file's SHA-256 against the manifest. Returns the written (unflushed) temp file.
-pub fn write_join(ctx: &Ctx, manifest_path: &Path, parts: &[PathBuf], final_path: &Path) -> Result<Written> {
+pub fn write_join(
+    ctx: &Ctx,
+    manifest_path: &Path,
+    parts: &[PathBuf],
+    final_path: &Path,
+) -> Result<Written> {
     let manifest = SplitManifest::load(manifest_path)?;
     let tmp = temp_path(final_path);
     let ltmp = sys::long_path(&tmp);
     // Unbuffered writes need every part boundary to be aligned.
-    let aligned = manifest.parts.iter().rev().skip(1).all(|p| p.size % ALIGN as u64 == 0);
+    let aligned = manifest
+        .parts
+        .iter()
+        .rev()
+        .skip(1)
+        .all(|p| p.size % ALIGN as u64 == 0);
     let nocache = ctx.profile.nocache_write && (aligned || !NOCACHE_NEEDS_ALIGNMENT);
     let dst = sys::open_write_new(&ltmp, nocache).ctx("création", &tmp)?;
     let _ = sys::set_hidden(&ltmp);
@@ -528,18 +629,43 @@ pub fn write_join(ctx: &Ctx, manifest_path: &Path, parts: &[PathBuf], final_path
     let mut whole = Sha256::new();
     let mut off = 0u64;
     for (i, p) in parts.iter().enumerate() {
-        let info = manifest.parts.get(i).ok_or_else(|| Error::Other(format!("morceau inattendu « {} »", p.display())))?;
+        let info = manifest
+            .parts
+            .get(i)
+            .ok_or_else(|| Error::Other(format!("morceau inattendu « {} »", p.display())))?;
         let (src, nc) = open_src(p, true)?;
         let len = src.metadata().ctx("lecture", p)?.len();
         if len != info.size {
-            return Err(Error::Other(format!("taille du morceau « {} » incorrecte : {} au lieu de {}", p.display(), len, info.size)));
+            return Err(Error::Other(format!(
+                "taille du morceau « {} » incorrecte : {} au lieu de {}",
+                p.display(),
+                len,
+                info.size
+            )));
         }
         let mut psha = Sha256::new();
         // Whole-file SHA is computed over the reassembled stream below, part SHA here.
-        stream(ctx, &src, nc, p, 0, len, &dst, nocache, &tmp, off, &mut h, &mut [&mut psha], &mut |_| Ok(()))?;
+        stream(
+            ctx,
+            &src,
+            nc,
+            p,
+            0,
+            len,
+            &dst,
+            nocache,
+            &tmp,
+            off,
+            &mut h,
+            &mut [&mut psha],
+            &mut |_| Ok(()),
+        )?;
         if psha.finish_hex() != info.sha256 {
             discard_tmp(&tmp);
-            return Err(Error::Other(format!("le morceau « {} » est corrompu (SHA-256 différent du manifeste)", p.display())));
+            return Err(Error::Other(format!(
+                "le morceau « {} » est corrompu (SHA-256 différent du manifeste)",
+                p.display()
+            )));
         }
         off += len;
     }
@@ -554,7 +680,8 @@ pub fn write_join(ctx: &Ctx, manifest_path: &Path, parts: &[PathBuf], final_path
         while pos < off {
             ctx.control.checkpoint()?;
             let want = (off - pos).min(chunk as u64) as usize;
-            let n = sys::read_full_at(&rf, &mut buf[..read_request(want, rnc)], pos).ctx("relecture", &tmp)?;
+            let n = sys::read_full_at(&rf, &mut buf[..read_request(want, rnc)], pos)
+                .ctx("relecture", &tmp)?;
             let used = n.min(want);
             if used == 0 {
                 break;
@@ -569,7 +696,17 @@ pub fn write_join(ctx: &Ctx, manifest_path: &Path, parts: &[PathBuf], final_path
         return Err(Error::VerifyMismatch(final_path.to_path_buf()));
     }
     let meta = std::fs::metadata(&parts[0]).ctx("lecture", &parts[0])?;
-    let mtime = SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(manifest.mtime_ms.max(0) as u64);
+    let mtime =
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(manifest.mtime_ms.max(0) as u64);
     let _ = dst.set_times(std::fs::FileTimes::new().set_modified(mtime));
-    Ok(Written { tmp, file: dst, hash: h.finish(), size: off, meta, dst_nocache: nocache, hidden: true, streams: vec![] })
+    Ok(Written {
+        tmp,
+        file: dst,
+        hash: h.finish(),
+        size: off,
+        meta,
+        dst_nocache: nocache,
+        hidden: true,
+        streams: vec![],
+    })
 }
