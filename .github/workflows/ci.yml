@@ -36,7 +36,7 @@ jobs:
             os: macos-15-intel
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -46,12 +46,11 @@ jobs:
         with:
           key: rust-${{ matrix.name }}
 
-      - name: cargo fmt (non-blocking)
-        continue-on-error: true
+      - name: cargo fmt
         run: cargo fmt --all -- --check
 
       - name: cargo clippy (engine, CLI, helper)
-        run: cargo clippy -p fc-core -p fc-cli -p fc-helper --all-targets
+        run: cargo clippy -p fc-core -p fc-cli -p fc-helper --all-targets -- -D warnings
 
       - name: cargo test (workspace minus shell extension and GUI)
         run: cargo test --workspace --exclude fc-shellext-win --exclude fast-copy-app
@@ -59,7 +58,7 @@ jobs:
       # ---- Windows-only: Explorer shell extension + sparse package --------------------------
       - name: Shell extension - clippy
         if: runner.os == 'Windows'
-        run: cargo clippy -p fc-shellext-win --all-targets
+        run: cargo clippy -p fc-shellext-win --all-targets -- -D warnings
 
       - name: Shell extension - unit tests
         if: runner.os == 'Windows'
@@ -90,15 +89,17 @@ jobs:
             os: macos-15
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
           key: gui-${{ matrix.name }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -107,6 +108,10 @@ jobs:
       - name: npm ci
         working-directory: app
         run: npm ci
+
+      - name: svelte-check
+        working-directory: app
+        run: npm run check -- --fail-on-warnings
 
       - name: npm run build
         working-directory: app
@@ -118,5 +123,13 @@ jobs:
         working-directory: app
         run: node scripts/prepare-sidecar.mjs --debug
 
+      # Debug build: the shell extension DLL, fcopy and MSIX are empty placeholders (expected).
       - name: cargo build -p fast-copy-app
+        env:
+          FASTCOPY_ALLOW_PLACEHOLDERS: "1"
         run: cargo build -p fast-copy-app
+
+      - name: cargo clippy -p fast-copy-app
+        env:
+          FASTCOPY_ALLOW_PLACEHOLDERS: "1"
+        run: cargo clippy -p fast-copy-app --all-targets -- -D warnings

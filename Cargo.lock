@@ -1149,7 +1149,6 @@ dependencies = [
  "fc-core",
  "indicatif",
  "serde_json",
- "tempfile",
 ]
 
 [[package]]

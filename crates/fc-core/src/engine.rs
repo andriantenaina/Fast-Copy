@@ -154,6 +154,9 @@ pub fn stream(
 }
 
 /// Hash `len` bytes of `f` from `off` into `hasher`, reading in large aligned chunks.
+// Hot verification path: each argument is a plain borrow/flag; bundling them into a struct
+// would only add indirection for the six call sites.
+#[allow(clippy::too_many_arguments)]
 pub fn hash_into(
     ctx: &Ctx,
     f: &File,
@@ -525,7 +528,10 @@ pub fn write_split(
     final_path: &Path,
     chunk: u64,
 ) -> Result<Vec<PathBuf>> {
-    assert!(chunk % ALIGN as u64 == 0, "split chunk must be aligned");
+    assert!(
+        chunk.is_multiple_of(ALIGN as u64),
+        "split chunk must be aligned"
+    );
     let meta0 =
         std::fs::metadata(sys::long_path(src_path)).ctx("lecture des métadonnées", src_path)?;
     let size = meta0.len();

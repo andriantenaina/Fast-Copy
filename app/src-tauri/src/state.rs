@@ -138,7 +138,7 @@ pub enum Intent {
         mode: Option<Mode>,
     },
     #[serde(rename_all = "camelCase")]
-    Plan { plan: PlanView },
+    Plan { plan: Box<PlanView> },
     #[serde(rename_all = "camelCase")]
     Started { job_id: String },
     #[serde(rename_all = "camelCase")]
@@ -403,7 +403,7 @@ impl QueueSink for TauriSink {
                 t.last_progress = Some(now);
                 t.last_phase = Some(s.phase);
                 if t.last_flush
-                    .map_or(true, |l| now.duration_since(l) >= FILES_FLUSH)
+                    .is_none_or(|l| now.duration_since(l) >= FILES_FLUSH)
                 {
                     self.flush_files(job_id, t);
                 }

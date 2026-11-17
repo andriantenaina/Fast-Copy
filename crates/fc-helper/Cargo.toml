@@ -4,7 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
 description = "Fast Copy elevated helper (drive formatting, VSS snapshots)"
 
 # No unit tests here; the test harness would inherit the requireAdministrator manifest
@@ -15,7 +16,10 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-fc-core.workspace = true
 serde_json.workspace = true
+
+# Formatting and VSS snapshots are Windows-only; on macOS the helper only reports "unsupported".
+[target.'cfg(windows)'.dependencies]
+fc-core.workspace = true
 
 [build-dependencies]

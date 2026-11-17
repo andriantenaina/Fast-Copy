@@ -64,7 +64,7 @@ jobs:
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -95,7 +95,7 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Compress-Archive -Path "$dir/fcopy.exe", "$dir/fc-helper.exe" -DestinationPath "dist/fast-copy-cli-$env:VERSION-windows-${{ matrix.arch }}.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-windows-${{ matrix.arch }}
           path: dist/*
@@ -111,7 +111,7 @@ jobs:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
       HAS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
@@ -172,7 +172,7 @@ jobs:
         # Bare executables cannot be stapled; Gatekeeper checks the ticket online.
         run: xcrun notarytool submit "dist/fast-copy-cli-$VERSION-macos-universal.zip" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-macos-universal
           path: dist/*
@@ -197,12 +197,12 @@ jobs:
       AZURE_TS_PROFILE: ${{ vars.AZURE_TS_PROFILE }}
       AZURE_TS_PUBLISHER: ${{ vars.AZURE_TS_PUBLISHER }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           key: gui-windows
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -285,7 +285,7 @@ jobs:
           "TAURI_CI_CONFIG=$path" >> $env:GITHUB_ENV
 
       - name: Build GUI bundles
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         with:
           projectPath: app
           args: --bundles nsis,msi --config ${{ env.TAURI_CI_CONFIG }}
@@ -301,7 +301,7 @@ jobs:
           Copy-Item packaging/windows/out/FastCopy.msix "dist/FastCopy-shellext-$env:VERSION-x64.msix"
           Get-ChildItem dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gui-windows-x64
           path: dist/*
@@ -317,14 +317,14 @@ jobs:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
       HAS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
         with:
           key: gui-macos
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -375,7 +375,7 @@ jobs:
           fi
 
       - name: Build GUI bundle
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         with:
           projectPath: app
           args: --target universal-apple-darwin --bundles dmg --config ${{ env.TAURI_CI_CONFIG }}
@@ -388,7 +388,7 @@ jobs:
           done
           ls -l dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gui-macos-universal
           path: dist/*
@@ -404,9 +404,9 @@ jobs:
     env:
       VERSION: ${{ needs.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -440,7 +440,7 @@ jobs:
           (cd dist && sha256sum fast-copy-packaging-manifests-$VERSION.tar.gz >> SHA256SUMS)
 
       - name: Create draft release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', env.VERSION) || github.ref_name }}

@@ -262,12 +262,12 @@ fn main() {
         }
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main_window(app),
-        RunEvent::ExitRequested { api, code, .. } => {
-            // Closing the last window must not quit while jobs run (hidden to tray);
-            // an explicit app.exit(…) carries a code and is honoured.
-            if code.is_none() && app.state::<AppState>().active_jobs() > 0 {
-                api.prevent_exit();
-            }
+        // Closing the last window must not quit while jobs run (hidden to tray);
+        // an explicit app.exit(…) carries a code and is honoured.
+        RunEvent::ExitRequested { api, code, .. }
+            if code.is_none() && app.state::<AppState>().active_jobs() > 0 =>
+        {
+            api.prevent_exit();
         }
         _ => {}
     });

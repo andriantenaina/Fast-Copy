@@ -157,7 +157,7 @@ mod tests {
         assert_eq!(part_name("a.iso", 0, 3), "a.iso.001");
         assert_eq!(part_count(SPLIT_CHUNK), 1);
         assert_eq!(part_count(SPLIT_CHUNK + 1), 2);
-        assert!(SPLIT_CHUNK < 4_294_967_295);
+        const { assert!(SPLIT_CHUNK < 4_294_967_295) };
         assert_eq!(SPLIT_CHUNK % (1 << 20), 0);
     }
 }

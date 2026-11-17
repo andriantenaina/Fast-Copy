@@ -134,8 +134,8 @@ impl CollisionMap {
     /// Returns a unique relative path (components joined by '/').
     pub fn unique(&mut self, rel: &str) -> String {
         let key = collision_key(rel);
-        if !self.seen.contains_key(&key) {
-            self.seen.insert(key, 1);
+        if let std::collections::hash_map::Entry::Vacant(e) = self.seen.entry(key) {
+            e.insert(1);
             return rel.to_string();
         }
         let (dir, file) = match rel.rfind('/') {
@@ -145,9 +145,10 @@ impl CollisionMap {
         let mut n = 2;
         loop {
             let cand = format!("{dir}{}", numbered(file, n));
-            let k = collision_key(&cand);
-            if !self.seen.contains_key(&k) {
-                self.seen.insert(k, 1);
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                self.seen.entry(collision_key(&cand))
+            {
+                e.insert(1);
                 return cand;
             }
             n += 1;

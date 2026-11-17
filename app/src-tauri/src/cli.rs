@@ -244,7 +244,12 @@ pub fn dispatch(app: &AppHandle, req: Request) {
                     }
                     Ok(plan) => {
                         let view = state.keep_plan(plan);
-                        state.push_intent(&app, Intent::Plan { plan: view });
+                        state.push_intent(
+                            &app,
+                            Intent::Plan {
+                                plan: Box::new(view),
+                            },
+                        );
                     }
                     Err(e) => state.push_intent(
                         &app,

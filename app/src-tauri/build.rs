@@ -23,10 +23,13 @@ fn ensure(path: &Path, what: &str, how: &str) {
         }
         let _ = std::fs::write(path, b"");
     }
-    println!(
-        "cargo:warning={what} missing: using an empty placeholder at {} ({how})",
-        path.display()
-    );
+    // FASTCOPY_ALLOW_PLACEHOLDERS=1 means the placeholder is expected (CI, local experiments).
+    if !allow {
+        println!(
+            "cargo:warning={what} missing: using an empty placeholder at {} ({how})",
+            path.display()
+        );
+    }
 }
 
 fn main() {
