@@ -331,6 +331,11 @@ fn resume_after_cancel() {
     p.profile.checkpoint_bytes = 1_048_576;
     p.profile.parallel_lanes = false;
     p.profile.small_workers = 2;
+    // On APFS/ReFS same-volume copies are instant CoW clones, so the cancel would land after the
+    // job finished; force the streaming pipeline, which is what this test exercises.
+    if p.dst_volume.fs.supports_clone() {
+        p.dst_volume.fs = fc_core::volume::FsKind::Other("test-no-clone".into());
+    }
 
     let control = Arc::new(Control::new());
     let c2 = control.clone();
