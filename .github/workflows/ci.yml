@@ -29,8 +29,8 @@ jobs:
           - name: windows-x64
             os: windows-latest
           - name: macos-arm64
-            os: macos-14
-          # macos-13 (the last x86_64 image of that line) has been retired by GitHub;
+            os: macos-15
+          # macos-13 and macos-14 images have been retired by GitHub;
           # macos-15-intel is the x86_64 replacement label.
           - name: macos-x86_64
             os: macos-15-intel
@@ -87,7 +87,7 @@ jobs:
           - name: windows-x64
             os: windows-latest
           - name: macos-arm64
-            os: macos-14
+            os: macos-15
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

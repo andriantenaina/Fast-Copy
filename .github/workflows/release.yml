@@ -105,7 +105,7 @@ jobs:
   cli-macos:
     name: CLI macos-universal
     needs: meta
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       VERSION: ${{ needs.meta.outputs.version }}
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
@@ -311,7 +311,7 @@ jobs:
   gui-macos:
     name: GUI macos-universal (DMG)
     needs: meta
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       VERSION: ${{ needs.meta.outputs.version }}
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
